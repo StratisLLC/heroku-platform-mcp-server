@@ -1,0 +1,1387 @@
+{
+  "$schema": "http://interagent.github.io/interagent-hyper-schema",
+  "type": [
+    "object"
+  ],
+  "description": "Heroku Platform API (minimised fixture). Refresh via packages/core/scripts/refresh-schema-fixture.mjs.",
+  "definitions": {
+    "account": {
+      "description": "An account represents an individual signed up to use the Heroku platform.",
+      "$schema": "http://json-schema.org/draft-04/hyper-schema",
+      "stability": "production",
+      "strictProperties": true,
+      "title": "Heroku Platform API - Account",
+      "type": [
+        "object"
+      ],
+      "definitions": {
+        "allow_tracking": {
+          "default": true,
+          "description": "whether to allow third party web activity tracking",
+          "example": true,
+          "readOnly": false,
+          "type": [
+            "boolean"
+          ]
+        },
+        "beta": {
+          "default": false,
+          "description": "whether allowed to utilize beta Heroku features",
+          "example": false,
+          "readOnly": false,
+          "type": [
+            "boolean"
+          ]
+        },
+        "created_at": {
+          "description": "when account was created",
+          "example": "2012-01-01T12:00:00Z",
+          "format": "date-time",
+          "readOnly": true,
+          "type": [
+            "string"
+          ]
+        },
+        "country_of_residence": {
+          "description": "country where account owner resides",
+          "example": "United States",
+          "readOnly": false,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "email": {
+          "description": "unique email address of account",
+          "example": "username@example.com",
+          "format": "email",
+          "readOnly": false,
+          "type": [
+            "string"
+          ]
+        },
+        "federated": {
+          "description": "whether the user is federated and belongs to an Identity Provider",
+          "example": false,
+          "readOnly": true,
+          "type": [
+            "boolean"
+          ]
+        },
+        "id": {
+          "description": "unique identifier of an account",
+          "example": "01234567-89ab-cdef-0123-456789abcdef",
+          "format": "uuid",
+          "readOnly": true,
+          "type": [
+            "string"
+          ]
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/account/definitions/email"
+            },
+            {
+              "$ref": "#/definitions/account/definitions/id"
+            },
+            {
+              "$ref": "#/definitions/account/definitions/self"
+            }
+          ]
+        },
+        "last_login": {
+          "description": "when account last authorized with Heroku",
+          "example": "2012-01-01T12:00:00Z",
+          "format": "date-time",
+          "readOnly": true,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "full name of the account owner",
+          "example": "Tina Edmonds",
+          "readOnly": false,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "password": {
+          "description": "current password on the account",
+          "example": "currentpassword",
+          "readOnly": true,
+          "type": [
+            "string"
+          ]
+        },
+        "self": {
+          "description": "Implicit reference to currently authorized user",
+          "enum": [
+            "~"
+          ],
+          "example": "~",
+          "readOnly": true,
+          "type": [
+            "string"
+          ]
+        },
+        "sms_number": {
+          "description": "SMS number of account",
+          "example": "+1 ***-***-1234",
+          "readOnly": true,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "suspended_at": {
+          "description": "when account was suspended",
+          "example": "2012-01-01T12:00:00Z",
+          "format": "date-time",
+          "readOnly": true,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delinquent_at": {
+          "description": "when account became delinquent",
+          "example": "2012-01-01T12:00:00Z",
+          "format": "date-time",
+          "readOnly": true,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "two_factor_authentication": {
+          "description": "whether two-factor auth is enabled on the account",
+          "example": false,
+          "readOnly": true,
+          "type": [
+            "boolean"
+          ]
+        },
+        "updated_at": {
+          "description": "when account was updated",
+          "example": "2012-01-01T12:00:00Z",
+          "format": "date-time",
+          "readOnly": true,
+          "type": [
+            "string"
+          ]
+        },
+        "verified": {
+          "default": false,
+          "description": "whether account has been verified with billing information",
+          "example": false,
+          "readOnly": true,
+          "type": [
+            "boolean"
+          ]
+        }
+      },
+      "links": [
+        {
+          "description": "Info for account.",
+          "href": "/account",
+          "method": "GET",
+          "rel": "self",
+          "targetSchema": {
+            "$ref": "#/definitions/account"
+          },
+          "title": "Info"
+        },
+        {
+          "description": "Update account.",
+          "href": "/account",
+          "method": "PATCH",
+          "rel": "update",
+          "schema": {
+            "properties": {
+              "allow_tracking": {
+                "$ref": "#/definitions/account/definitions/allow_tracking"
+              },
+              "beta": {
+                "$ref": "#/definitions/account/definitions/beta"
+              },
+              "name": {
+                "$ref": "#/definitions/account/definitions/name"
+              }
+            },
+            "type": [
+              "object"
+            ]
+          },
+          "targetSchema": {
+            "$ref": "#/definitions/account"
+          },
+          "title": "Update"
+        },
+        {
+          "description": "Delete account. Note that this action cannot be undone. Note: This endpoint requires the HTTP_HEROKU_PASSWORD or HTTP_HEROKU_PASSWORD_BASE64 header be set correctly for the user account.",
+          "href": "/account",
+          "method": "DELETE",
+          "rel": "destroy",
+          "targetSchema": {
+            "$ref": "#/definitions/account"
+          },
+          "title": "Delete"
+        },
+        {
+          "description": "Info for account.",
+          "href": "/users/{(%23%2Fdefinitions%2Faccount%2Fdefinitions%2Fidentity)}",
+          "method": "GET",
+          "rel": "self",
+          "targetSchema": {
+            "$ref": "#/definitions/account"
+          },
+          "title": "Info By User"
+        },
+        {
+          "description": "Update account.",
+          "href": "/users/{(%23%2Fdefinitions%2Faccount%2Fdefinitions%2Fidentity)}",
+          "method": "PATCH",
+          "rel": "update",
+          "schema": {
+            "properties": {
+              "allow_tracking": {
+                "$ref": "#/definitions/account/definitions/allow_tracking"
+              },
+              "beta": {
+                "$ref": "#/definitions/account/definitions/beta"
+              },
+              "name": {
+                "$ref": "#/definitions/account/definitions/name"
+              }
+            },
+            "type": [
+              "object"
+            ]
+          },
+          "targetSchema": {
+            "$ref": "#/definitions/account"
+          },
+          "title": "Update By User"
+        },
+        {
+          "description": "Delete account. Note that this action cannot be undone. Note: This endpoint requires the HTTP_HEROKU_PASSWORD or HTTP_HEROKU_PASSWORD_BASE64 header be set correctly for the user account.",
+          "href": "/users/{(%23%2Fdefinitions%2Faccount%2Fdefinitions%2Fidentity)}",
+          "method": "DELETE",
+          "rel": "destroy",
+          "targetSchema": {
+            "$ref": "#/definitions/account"
+          },
+          "title": "Delete By User"
+        }
+      ],
+      "properties": {
+        "allow_tracking": {
+          "$ref": "#/definitions/account/definitions/allow_tracking"
+        },
+        "beta": {
+          "$ref": "#/definitions/account/definitions/beta"
+        },
+        "created_at": {
+          "$ref": "#/definitions/account/definitions/created_at"
+        },
+        "email": {
+          "$ref": "#/definitions/account/definitions/email"
+        },
+        "federated": {
+          "$ref": "#/definitions/account/definitions/federated"
+        },
+        "id": {
+          "$ref": "#/definitions/account/definitions/id"
+        },
+        "identity_provider": {
+          "description": "Identity Provider details for federated users.",
+          "strictProperties": true,
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/identity-provider/definitions/id"
+            },
+            "name": {
+              "$ref": "#/definitions/identity-provider/definitions/name"
+            },
+            "team": {
+              "type": [
+                "object"
+              ],
+              "properties": {
+                "name": {
+                  "$ref": "#/definitions/team/definitions/name"
+                }
+              }
+            },
+            "organization": {
+              "type": [
+                "object"
+              ],
+              "properties": {
+                "name": {
+                  "$ref": "#/definitions/team/definitions/name"
+                }
+              }
+            },
+            "owner": {
+              "$ref": "#/definitions/identity-provider/definitions/owner"
+            }
+          },
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "last_login": {
+          "$ref": "#/definitions/account/definitions/last_login"
+        },
+        "name": {
+          "$ref": "#/definitions/account/definitions/name"
+        },
+        "sms_number": {
+          "$ref": "#/definitions/account/definitions/sms_number"
+        },
+        "suspended_at": {
+          "$ref": "#/definitions/account/definitions/suspended_at"
+        },
+        "delinquent_at": {
+          "$ref": "#/definitions/account/definitions/delinquent_at"
+        },
+        "two_factor_authentication": {
+          "$ref": "#/definitions/account/definitions/two_factor_authentication"
+        },
+        "updated_at": {
+          "$ref": "#/definitions/account/definitions/updated_at"
+        },
+        "verified": {
+          "$ref": "#/definitions/account/definitions/verified"
+        },
+        "country_of_residence": {
+          "$ref": "#/definitions/account/definitions/country_of_residence"
+        },
+        "default_organization": {
+          "description": "team selected by default",
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/team/definitions/id"
+            },
+            "name": {
+              "$ref": "#/definitions/team/definitions/name"
+            }
+          },
+          "strictProperties": true,
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "default_team": {
+          "description": "team selected by default",
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/team/definitions/id"
+            },
+            "name": {
+              "$ref": "#/definitions/team/definitions/name"
+            }
+          },
+          "strictProperties": true,
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      }
+    },
+    "app": {
+      "description": "An app represents the program that you would like to deploy and run on Heroku.",
+      "$schema": "http://json-schema.org/draft-04/hyper-schema",
+      "stability": "production",
+      "strictProperties": true,
+      "title": "Heroku Platform API - App",
+      "type": [
+        "object"
+      ],
+      "definitions": {
+        "archived_at": {
+          "description": "when app was archived",
+          "example": "2012-01-01T12:00:00Z",
+          "format": "date-time",
+          "readOnly": true,
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "buildpack_provided_description": {
+          "description": "description from buildpack of app",
+          "example": "Ruby/Rack",
+          "readOnly": true,
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "created_at": {
+          "description": "when app was created",
+          "example": "2012-01-01T12:00:00Z",
+          "format": "date-time",
+          "readOnly": true,
+          "type": [
+            "string"
+          ]
+        },
+        "generation": {
+          "description": "Generation of the Heroku platform for this app",
+          "readOnly": true,
+          "type": [
+            "object"
+          ],
+          "properties": {
+            "id": {
+              "description": "unique identifier of the generation of the Heroku platform for this app",
+              "example": "01234567-89ab-cdef-0123-456789abcdef",
+              "format": "uuid",
+              "readOnly": true,
+              "type": [
+                "string"
+              ]
+            },
+            "name": {
+              "description": "unique name of the generation of the Heroku platform for this app",
+              "example": "cedar",
+              "readOnly": true,
+              "type": [
+                "string"
+              ]
+            }
+          }
+        },
+        "git_url": {
+          "description": "git repo URL of app",
+          "example": "https://git.heroku.com/example.git",
+          "pattern": "^https://git\\.heroku\\.com/[a-z][a-z0-9-]{2,29}\\.git$",
+          "readOnly": true,
+          "type": [
+            "string"
+          ]
+        },
+        "id": {
+          "description": "unique identifier of app",
+          "example": "01234567-89ab-cdef-0123-456789abcdef",
+          "format": "uuid",
+          "readOnly": true,
+          "type": [
+            "string"
+          ]
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/app/definitions/id"
+            },
+            {
+              "$ref": "#/definitions/app/definitions/name"
+            }
+          ]
+        },
+        "maintenance": {
+          "default": false,
+          "description": "maintenance status of app",
+          "example": false,
+          "readOnly": false,
+          "type": [
+            "boolean"
+          ]
+        },
+        "name": {
+          "description": "unique name of app",
+          "example": "example",
+          "pattern": "^[a-z][a-z0-9-]{1,28}[a-z0-9]$",
+          "readOnly": false,
+          "type": [
+            "string"
+          ]
+        },
+        "released_at": {
+          "default": null,
+          "description": "when app was released",
+          "example": "2012-01-01T12:00:00Z",
+          "format": "date-time",
+          "readOnly": true,
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "repo_size": {
+          "default": null,
+          "description": "git repo size in bytes of app",
+          "example": 0,
+          "readOnly": true,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "slug_size": {
+          "default": null,
+          "description": "slug size in bytes of app",
+          "example": 0,
+          "readOnly": true,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "updated_at": {
+          "description": "when app was updated",
+          "example": "2012-01-01T12:00:00Z",
+          "format": "date-time",
+          "readOnly": true,
+          "type": [
+            "string"
+          ]
+        },
+        "web_url": {
+          "description": "web URL of app",
+          "example": "https://example.herokuapp.com/",
+          "format": "uri",
+          "pattern": "^https?://[a-z][a-z0-9-]{3,43}\\.herokuapp\\.com/$",
+          "readOnly": true,
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "acm": {
+          "description": "ACM status of this app",
+          "default": false,
+          "example": false,
+          "readOnly": true,
+          "type": [
+            "boolean"
+          ]
+        }
+      },
+      "links": [
+        {
+          "description": "Create a new app.",
+          "href": "/apps",
+          "method": "POST",
+          "rel": "create",
+          "schema": {
+            "properties": {
+              "name": {
+                "$ref": "#/definitions/app/definitions/name"
+              },
+              "region": {
+                "$ref": "#/definitions/region/definitions/identity"
+              },
+              "stack": {
+                "$ref": "#/definitions/stack/definitions/identity"
+              },
+              "feature_flags": {
+                "description": "unique name of app feature",
+                "type": [
+                  "array"
+                ],
+                "items": {
+                  "$ref": "#/definitions/app-feature/definitions/name"
+                }
+              }
+            },
+            "type": [
+              "object"
+            ]
+          },
+          "targetSchema": {
+            "$ref": "#/definitions/app"
+          },
+          "title": "Create"
+        },
+        {
+          "description": "Delete an existing app.",
+          "href": "/apps/{(%23%2Fdefinitions%2Fapp%2Fdefinitions%2Fidentity)}",
+          "method": "DELETE",
+          "rel": "destroy",
+          "targetSchema": {
+            "$ref": "#/definitions/app"
+          },
+          "title": "Delete"
+        },
+        {
+          "description": "Info for existing app.",
+          "href": "/apps/{(%23%2Fdefinitions%2Fapp%2Fdefinitions%2Fidentity)}",
+          "method": "GET",
+          "rel": "self",
+          "targetSchema": {
+            "$ref": "#/definitions/app"
+          },
+          "title": "Info"
+        },
+        {
+          "description": "List existing apps.",
+          "href": "/apps",
+          "method": "GET",
+          "ranges": [
+            "id",
+            "name",
+            "updated_at"
+          ],
+          "rel": "instances",
+          "targetSchema": {
+            "items": {
+              "$ref": "#/definitions/app"
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "title": "List"
+        },
+        {
+          "description": "List owned and collaborated apps (excludes team apps).",
+          "href": "/users/{(%23%2Fdefinitions%2Faccount%2Fdefinitions%2Fidentity)}/apps",
+          "method": "GET",
+          "ranges": [
+            "id",
+            "name",
+            "updated_at"
+          ],
+          "rel": "instances",
+          "targetSchema": {
+            "items": {
+              "$ref": "#/definitions/app"
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "title": "List Owned and Collaborated"
+        },
+        {
+          "description": "Update an existing app.",
+          "href": "/apps/{(%23%2Fdefinitions%2Fapp%2Fdefinitions%2Fidentity)}",
+          "method": "PATCH",
+          "rel": "update",
+          "schema": {
+            "properties": {
+              "build_stack": {
+                "$ref": "#/definitions/stack/definitions/identity"
+              },
+              "maintenance": {
+                "$ref": "#/definitions/app/definitions/maintenance"
+              },
+              "name": {
+                "$ref": "#/definitions/app/definitions/name"
+              }
+            },
+            "type": [
+              "object"
+            ]
+          },
+          "targetSchema": {
+            "$ref": "#/definitions/app"
+          },
+          "title": "Update"
+        },
+        {
+          "description": "Enable ACM flag for an app",
+          "href": "/apps/{(%23%2Fdefinitions%2Fapp%2Fdefinitions%2Fidentity)}/acm",
+          "method": "POST",
+          "rel": "update",
+          "targetSchema": {
+            "$ref": "#/definitions/app"
+          },
+          "title": "Enable ACM"
+        },
+        {
+          "description": "Disable ACM flag for an app",
+          "href": "/apps/{(%23%2Fdefinitions%2Fapp%2Fdefinitions%2Fidentity)}/acm",
+          "method": "DELETE",
+          "rel": "delete",
+          "targetSchema": {
+            "$ref": "#/definitions/app"
+          },
+          "title": "Disable ACM"
+        },
+        {
+          "description": "Refresh ACM for an app",
+          "href": "/apps/{(%23%2Fdefinitions%2Fapp%2Fdefinitions%2Fidentity)}/acm",
+          "method": "PATCH",
+          "rel": "update",
+          "targetSchema": {
+            "$ref": "#/definitions/app"
+          },
+          "title": "Refresh ACM"
+        }
+      ],
+      "properties": {
+        "acm": {
+          "$ref": "#/definitions/app/definitions/acm"
+        },
+        "archived_at": {
+          "$ref": "#/definitions/app/definitions/archived_at"
+        },
+        "buildpack_provided_description": {
+          "$ref": "#/definitions/app/definitions/buildpack_provided_description"
+        },
+        "build_stack": {
+          "description": "identity of the stack that will be used for new builds",
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/stack/definitions/id"
+            },
+            "name": {
+              "$ref": "#/definitions/stack/definitions/name"
+            }
+          },
+          "strictProperties": true,
+          "type": [
+            "object"
+          ]
+        },
+        "created_at": {
+          "$ref": "#/definitions/app/definitions/created_at"
+        },
+        "generation": {
+          "$ref": "#/definitions/app/definitions/generation"
+        },
+        "git_url": {
+          "$ref": "#/definitions/app/definitions/git_url"
+        },
+        "id": {
+          "$ref": "#/definitions/app/definitions/id"
+        },
+        "internal_routing": {
+          "$ref": "#/definitions/team-app/definitions/internal_routing"
+        },
+        "maintenance": {
+          "$ref": "#/definitions/app/definitions/maintenance"
+        },
+        "name": {
+          "$ref": "#/definitions/app/definitions/name"
+        },
+        "owner": {
+          "description": "identity of app owner",
+          "properties": {
+            "email": {
+              "$ref": "#/definitions/account/definitions/email"
+            },
+            "id": {
+              "$ref": "#/definitions/account/definitions/id"
+            }
+          },
+          "strictProperties": true,
+          "type": [
+            "object"
+          ]
+        },
+        "organization": {
+          "description": "identity of team",
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/team/definitions/id"
+            },
+            "name": {
+              "$ref": "#/definitions/team/definitions/name"
+            }
+          },
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "team": {
+          "description": "identity of team",
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/team/definitions/id"
+            },
+            "name": {
+              "$ref": "#/definitions/team/definitions/name"
+            }
+          },
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "region": {
+          "description": "identity of app region",
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/region/definitions/id"
+            },
+            "name": {
+              "$ref": "#/definitions/region/definitions/name"
+            }
+          },
+          "strictProperties": true,
+          "type": [
+            "object"
+          ]
+        },
+        "released_at": {
+          "$ref": "#/definitions/app/definitions/released_at"
+        },
+        "repo_size": {
+          "$ref": "#/definitions/app/definitions/repo_size"
+        },
+        "slug_size": {
+          "$ref": "#/definitions/app/definitions/slug_size"
+        },
+        "space": {
+          "description": "identity of space",
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/space/definitions/id"
+            },
+            "name": {
+              "$ref": "#/definitions/space/definitions/name"
+            },
+            "shield": {
+              "$ref": "#/definitions/space/definitions/shield"
+            }
+          },
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "stack": {
+          "description": "identity of app stack",
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/stack/definitions/id"
+            },
+            "name": {
+              "$ref": "#/definitions/stack/definitions/name"
+            }
+          },
+          "strictProperties": true,
+          "type": [
+            "object"
+          ]
+        },
+        "updated_at": {
+          "$ref": "#/definitions/app/definitions/updated_at"
+        },
+        "web_url": {
+          "$ref": "#/definitions/app/definitions/web_url"
+        }
+      }
+    },
+    "rate-limit": {
+      "description": "Rate Limit represents the number of request tokens each account holds. Requests to this endpoint do not count towards the rate limit.",
+      "$schema": "http://json-schema.org/draft-04/hyper-schema",
+      "stability": "production",
+      "strictProperties": true,
+      "title": "Heroku Platform API - Rate Limit",
+      "type": [
+        "object"
+      ],
+      "definitions": {
+        "identity": {},
+        "remaining": {
+          "description": "allowed requests remaining in current interval",
+          "example": 2399,
+          "readOnly": true,
+          "type": [
+            "integer"
+          ]
+        }
+      },
+      "links": [
+        {
+          "description": "Info for rate limits.",
+          "href": "/account/rate-limits",
+          "method": "GET",
+          "rel": "self",
+          "targetSchema": {
+            "$ref": "#/definitions/rate-limit"
+          },
+          "title": "Info"
+        }
+      ],
+      "properties": {
+        "remaining": {
+          "$ref": "#/definitions/rate-limit/definitions/remaining"
+        }
+      }
+    },
+    "team": {
+      "$schema": "http://json-schema.org/draft-04/hyper-schema",
+      "description": "Teams allow you to manage access to a shared group of applications and other resources.",
+      "stability": "development",
+      "strictProperties": true,
+      "title": "Heroku Platform API - Team",
+      "type": [
+        "object"
+      ],
+      "definitions": {
+        "created_at": {
+          "description": "when the team was created",
+          "example": "2012-01-01T12:00:00Z",
+          "format": "date-time",
+          "readOnly": true,
+          "type": [
+            "string"
+          ]
+        },
+        "credit_card_collections": {
+          "description": "whether charges incurred by the team are paid by credit card.",
+          "example": true,
+          "readOnly": true,
+          "type": [
+            "boolean"
+          ]
+        },
+        "default": {
+          "description": "whether to use this team when none is specified",
+          "example": true,
+          "readOnly": false,
+          "type": [
+            "boolean"
+          ]
+        },
+        "enterprise_account": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/enterprise-account/definitions/id"
+            },
+            "name": {
+              "$ref": "#/definitions/enterprise-account/definitions/name"
+            }
+          }
+        },
+        "id": {
+          "description": "unique identifier of team",
+          "example": "01234567-89ab-cdef-0123-456789abcdef",
+          "format": "uuid",
+          "readOnly": true,
+          "type": [
+            "string"
+          ]
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/team/definitions/name"
+            },
+            {
+              "$ref": "#/definitions/team/definitions/id"
+            }
+          ]
+        },
+        "identity_provider": {
+          "description": "Identity Provider associated with the Team",
+          "strictProperties": true,
+          "type": [
+            "null",
+            "object"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/identity-provider/definitions/id"
+            },
+            "name": {
+              "$ref": "#/definitions/identity-provider/definitions/name"
+            },
+            "owner": {
+              "$ref": "#/definitions/identity-provider/definitions/owner"
+            }
+          }
+        },
+        "device_data": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Device data string generated by the client",
+          "example": "VGhpcyBpcyBhIGdvb2QgZGF5IHRvIGRpZQ=="
+        },
+        "nonce": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Nonce generated by Braintree hosted fields form",
+          "example": "VGhpcyBpcyBhIGdvb2QgZGF5IHRvIGRpZQ=="
+        },
+        "address_1": {
+          "type": [
+            "string"
+          ],
+          "description": "street address line 1",
+          "example": "40 Hickory Lane"
+        },
+        "address_2": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "street address line 2",
+          "example": "Suite 103"
+        },
+        "card_number": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "encrypted card number of payment method",
+          "example": "encrypted-card-number"
+        },
+        "city": {
+          "type": [
+            "string"
+          ],
+          "description": "city",
+          "example": "San Francisco"
+        },
+        "country": {
+          "type": [
+            "string"
+          ],
+          "description": "country",
+          "example": "US"
+        },
+        "cvv": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "card verification value",
+          "example": "123"
+        },
+        "expiration_month": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "expiration month",
+          "example": "11"
+        },
+        "expiration_year": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "expiration year",
+          "example": "2014"
+        },
+        "first_name": {
+          "type": [
+            "string"
+          ],
+          "description": "the first name for payment method",
+          "example": "Jason"
+        },
+        "last_name": {
+          "type": [
+            "string"
+          ],
+          "description": "the last name for payment method",
+          "example": "Walker"
+        },
+        "other": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "metadata",
+          "example": "Additional information for payment method"
+        },
+        "postal_code": {
+          "type": [
+            "string"
+          ],
+          "description": "postal code",
+          "example": "90210"
+        },
+        "state": {
+          "type": [
+            "string"
+          ],
+          "description": "state",
+          "example": "CA"
+        },
+        "membership_limit": {
+          "description": "upper limit of members allowed in a team.",
+          "example": 25,
+          "readOnly": true,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "unique name of team",
+          "example": "example",
+          "readOnly": true,
+          "type": [
+            "string"
+          ]
+        },
+        "provisioned_licenses": {
+          "description": "whether the team is provisioned licenses by salesforce.",
+          "example": true,
+          "readOnly": true,
+          "type": [
+            "boolean"
+          ]
+        },
+        "role": {
+          "description": "role in the team",
+          "enum": [
+            "admin",
+            "collaborator",
+            "member",
+            "owner",
+            null
+          ],
+          "example": "admin",
+          "readOnly": true,
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "type": {
+          "description": "type of team.",
+          "example": "team",
+          "enum": [
+            "enterprise",
+            "team"
+          ],
+          "readOnly": true,
+          "type": [
+            "string"
+          ]
+        },
+        "updated_at": {
+          "description": "when the team was updated",
+          "example": "2012-01-01T12:00:00Z",
+          "format": "date-time",
+          "readOnly": true,
+          "type": [
+            "string"
+          ]
+        }
+      },
+      "links": [
+        {
+          "description": "List teams in which you are a member.",
+          "href": "/teams",
+          "method": "GET",
+          "rel": "instances",
+          "targetSchema": {
+            "items": {
+              "$ref": "#/definitions/team"
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "title": "List"
+        },
+        {
+          "description": "Info for a team.",
+          "href": "/teams/{(%23%2Fdefinitions%2Fteam%2Fdefinitions%2Fidentity)}",
+          "method": "GET",
+          "rel": "self",
+          "targetSchema": {
+            "$ref": "#/definitions/team"
+          },
+          "title": "Info"
+        },
+        {
+          "description": "Update team properties.",
+          "href": "/teams/{(%23%2Fdefinitions%2Fteam%2Fdefinitions%2Fidentity)}",
+          "method": "PATCH",
+          "rel": "update",
+          "schema": {
+            "properties": {
+              "default": {
+                "$ref": "#/definitions/team/definitions/default"
+              },
+              "name": {
+                "$ref": "#/definitions/team/definitions/name"
+              }
+            },
+            "type": [
+              "object"
+            ]
+          },
+          "targetSchema": {
+            "$ref": "#/definitions/team"
+          },
+          "title": "Update"
+        },
+        {
+          "description": "Create a new team.",
+          "href": "/teams",
+          "method": "POST",
+          "rel": "create",
+          "schema": {
+            "properties": {
+              "name": {
+                "$ref": "#/definitions/team/definitions/name"
+              },
+              "address_1": {
+                "$ref": "#/definitions/team/definitions/address_1"
+              },
+              "address_2": {
+                "$ref": "#/definitions/team/definitions/address_2"
+              },
+              "card_number": {
+                "$ref": "#/definitions/team/definitions/card_number"
+              },
+              "city": {
+                "$ref": "#/definitions/team/definitions/city"
+              },
+              "country": {
+                "$ref": "#/definitions/team/definitions/country"
+              },
+              "cvv": {
+                "$ref": "#/definitions/team/definitions/cvv"
+              },
+              "expiration_month": {
+                "$ref": "#/definitions/team/definitions/expiration_month"
+              },
+              "expiration_year": {
+                "$ref": "#/definitions/team/definitions/expiration_year"
+              },
+              "first_name": {
+                "$ref": "#/definitions/team/definitions/first_name"
+              },
+              "last_name": {
+                "$ref": "#/definitions/team/definitions/last_name"
+              },
+              "other": {
+                "$ref": "#/definitions/team/definitions/other"
+              },
+              "postal_code": {
+                "$ref": "#/definitions/team/definitions/postal_code"
+              },
+              "state": {
+                "$ref": "#/definitions/team/definitions/state"
+              },
+              "nonce": {
+                "$ref": "#/definitions/team/definitions/nonce"
+              },
+              "device_data": {
+                "$ref": "#/definitions/team/definitions/device_data"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": [
+              "object"
+            ]
+          },
+          "targetSchema": {
+            "$ref": "#/definitions/team"
+          },
+          "title": "Create"
+        },
+        {
+          "description": "Delete an existing team.",
+          "href": "/teams/{(%23%2Fdefinitions%2Fteam%2Fdefinitions%2Fidentity)}",
+          "method": "DELETE",
+          "rel": "destroy",
+          "targetSchema": {
+            "$ref": "#/definitions/team"
+          },
+          "title": "Delete"
+        },
+        {
+          "description": "List teams for an enterprise account.",
+          "href": "/enterprise-accounts/{(%23%2Fdefinitions%2Fenterprise-account%2Fdefinitions%2Fidentity)}/teams",
+          "method": "GET",
+          "rel": "instances",
+          "targetSchema": {
+            "items": {
+              "$ref": "#/definitions/team"
+            },
+            "type": [
+              "array"
+            ]
+          },
+          "title": "List by Enterprise Account"
+        },
+        {
+          "description": "Create a team in an enterprise account.",
+          "href": "/enterprise-accounts/{(%23%2Fdefinitions%2Fenterprise-account%2Fdefinitions%2Fidentity)}/teams",
+          "method": "POST",
+          "rel": "create",
+          "schema": {
+            "properties": {
+              "name": {
+                "$ref": "#/definitions/team/definitions/name"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": [
+              "object"
+            ]
+          },
+          "targetSchema": {
+            "$ref": "#/definitions/team"
+          },
+          "title": "Create in Enterprise Account"
+        }
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/team/definitions/id"
+        },
+        "created_at": {
+          "$ref": "#/definitions/team/definitions/created_at"
+        },
+        "credit_card_collections": {
+          "$ref": "#/definitions/team/definitions/credit_card_collections"
+        },
+        "default": {
+          "$ref": "#/definitions/team/definitions/default"
+        },
+        "enterprise_account": {
+          "$ref": "#/definitions/team/definitions/enterprise_account"
+        },
+        "identity_provider": {
+          "$ref": "#/definitions/team/definitions/identity_provider"
+        },
+        "membership_limit": {
+          "$ref": "#/definitions/team/definitions/membership_limit"
+        },
+        "name": {
+          "$ref": "#/definitions/team/definitions/name"
+        },
+        "provisioned_licenses": {
+          "$ref": "#/definitions/team/definitions/provisioned_licenses"
+        },
+        "role": {
+          "$ref": "#/definitions/team/definitions/role"
+        },
+        "type": {
+          "$ref": "#/definitions/team/definitions/type"
+        },
+        "updated_at": {
+          "$ref": "#/definitions/team/definitions/updated_at"
+        }
+      }
+    }
+  }
+}
