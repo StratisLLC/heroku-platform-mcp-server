@@ -115,7 +115,12 @@ export function registerDomainsWriteTools(server: McpServer, ctx: ToolContext): 
     description:
       'Remove a custom domain from an app. Wraps DELETE /apps/{id_or_name}/domains/{id_or_hostname}. Destructive: pass confirm matching the hostname.',
     inputSchema: domainsDeleteShape,
-    destructive: { targetKind: 'domain', expectedFrom: (args) => args.domain },
+    destructive: {
+      targetKind: 'domain',
+      expectedFromResource: (resource) =>
+        typeof resource?.hostname === 'string' ? resource.hostname : undefined,
+      expectedFromArgs: (args) => args.domain,
+    },
     preFetch: {
       run: (args) =>
         ctx.client.get<HerokuRecord>(`/apps/${url(args.app)}/domains/${url(args.domain)}`, {
@@ -168,7 +173,12 @@ export function registerDomainsWriteTools(server: McpServer, ctx: ToolContext): 
     description:
       'Remove an SNI endpoint from an app. Wraps DELETE /apps/{id_or_name}/sni-endpoints/{id_or_name}. Destructive: pass confirm matching the endpoint name.',
     inputSchema: sniDeleteShape,
-    destructive: { targetKind: 'endpoint', expectedFrom: (args) => args.endpoint },
+    destructive: {
+      targetKind: 'endpoint',
+      expectedFromResource: (resource) =>
+        typeof resource?.name === 'string' ? resource.name : undefined,
+      expectedFromArgs: (args) => args.endpoint,
+    },
     preFetch: {
       run: (args) =>
         ctx.client.get<HerokuRecord>(`/apps/${url(args.app)}/sni-endpoints/${url(args.endpoint)}`, {

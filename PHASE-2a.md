@@ -76,6 +76,8 @@ Destructive tools require a `confirm: string` parameter. The MCP server does NOT
 
 The model should be instructed (via tool description) NEVER to fill confirm from the same user turn that requested the destructive op. The verbal confirmation in chat is the audit trail.
 
+Note (post-Phase-2b fix): The expected confirm value is extracted from the prefetched resource's canonical identifier field, not from the input arg. This ensures confirm captures what the user typed in conversation regardless of whether the model passed the resource's UUID or human-readable name as input. See notes/divergences.md #33.
+
 DECISION 2 — Confirmation error shape (Structured)
 ---------------------------------------------------
 When a destructive tool is called without confirm, or with a mismatched value, the response is:

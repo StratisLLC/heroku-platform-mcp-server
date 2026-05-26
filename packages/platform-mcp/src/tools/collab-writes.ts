@@ -89,7 +89,19 @@ export function registerCollabWriteTools(server: McpServer, ctx: ToolContext): v
     description:
       'Remove a collaborator from an app. Wraps DELETE /apps/{id_or_name}/collaborators/{id_or_email}. Destructive: pass confirm matching the collaborator email.',
     inputSchema: collaboratorsDeleteShape,
-    destructive: { targetKind: 'collaborator', expectedFrom: (args) => args.collaborator },
+    destructive: {
+      targetKind: 'collaborator',
+      // Heroku returns the collaborator's user as `user: { email, id }`.
+      expectedFromResource: (resource) => {
+        const user = resource?.user;
+        if (user && typeof user === 'object') {
+          const email = (user as { email?: unknown }).email;
+          if (typeof email === 'string') return email;
+        }
+        return undefined;
+      },
+      expectedFromArgs: (args) => args.collaborator,
+    },
     preFetch: {
       run: (args) =>
         ctx.client.get<HerokuRecord>(
@@ -131,14 +143,26 @@ export function registerCollabWriteTools(server: McpServer, ctx: ToolContext): v
     description:
       'Change the state of a pending app transfer (accept or decline). Wraps PATCH /account/app-transfers/{id_or_name}. Destructive: pass confirm matching the app name — accepting transfers ownership of the live app.',
     inputSchema: appTransfersUpdateShape,
-    destructive: { targetKind: 'transfer', expectedFrom: (args) => args.app },
+    destructive: {
+      targetKind: 'transfer',
+      expectedFromResource: pickTransferAppName,
+      expectedFromArgs: (args) => args.app,
+    },
+    preFetch: {
+      run: (args) =>
+        ctx.client.get<HerokuRecord>(`/account/app-transfers/${url(args.transfer)}`, {
+          tool: 'app_transfers_update',
+        }),
+    },
     build: (args) => ({
       method: 'PATCH',
       path: `/account/app-transfers/${url(args.transfer)}`,
       body: { state: args.state },
     }),
-    describe: (args) =>
-      `Would set app transfer '${args.transfer}' (app '${args.app}') to state '${args.state}'. Accepting changes ownership of the live app.`,
+    describe: (args, fetched) => {
+      const appName = pickTransferAppName(fetched) ?? args.app;
+      return `Would set app transfer '${args.transfer}' (app '${appName}') to state '${args.state}'. Accepting changes ownership of the live app.`;
+    },
   });
 
   registerWriteTool<typeof appTransfersDeleteShape, HerokuRecord>(server, ctx, {
@@ -147,7 +171,11 @@ export function registerCollabWriteTools(server: McpServer, ctx: ToolContext): v
     description:
       'Cancel a pending app transfer offer. Wraps DELETE /account/app-transfers/{id_or_name}. Destructive: pass confirm matching the app name.',
     inputSchema: appTransfersDeleteShape,
-    destructive: { targetKind: 'transfer', expectedFrom: (args) => args.app },
+    destructive: {
+      targetKind: 'transfer',
+      expectedFromResource: pickTransferAppName,
+      expectedFromArgs: (args) => args.app,
+    },
     preFetch: {
       run: (args) =>
         ctx.client.get<HerokuRecord>(`/account/app-transfers/${url(args.transfer)}`, {
@@ -160,7 +188,20 @@ export function registerCollabWriteTools(server: McpServer, ctx: ToolContext): v
     }),
     describe: (args, fetched) => {
       const state = typeof fetched?.state === 'string' ? ` (current state ${fetched.state})` : '';
-      return `Would cancel app transfer '${args.transfer}' for app '${args.app}'${state}.`;
+      const appName = pickTransferAppName(fetched) ?? args.app;
+      return `Would cancel app transfer '${args.transfer}' for app '${appName}'${state}.`;
     },
   });
+}
+
+/** Pick the app's canonical name from a `/account/app-transfers/{id}`
+ *  response. Heroku nests it as `app: { id, name }`. */
+function pickTransferAppName(record: HerokuRecord | undefined): string | undefined {
+  if (!record) return undefined;
+  const app = record.app;
+  if (app && typeof app === 'object') {
+    const name = (app as { name?: unknown }).name;
+    if (typeof name === 'string') return name;
+  }
+  return undefined;
 }

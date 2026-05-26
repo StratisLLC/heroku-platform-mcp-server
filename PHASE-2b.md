@@ -97,6 +97,8 @@ For `teams_create`:
 For `teams_delete`:
   "Deletes a non-enterprise team via DELETE /teams/{id}. **Important context:** the Heroku CLI removed its `teams:destroy` command for the same reasons as `teams_create`. The API endpoint works and will destroy the team; apps continue to exist under the user who created them but lose team membership. Enterprise-owned teams must be deleted through the enterprise account, not this tool. Requires confirm matching the team name."
 
+The "confirm value" column below describes the canonical identifier the user must type. Implementation note: this value is extracted from the prefetched resource's response, not from input args. See notes/divergences.md #33 and packages/platform-mcp/src/write-tool.ts.
+
 DECISION 3 — Confirm targets for destructive teams-tier tools
 --------------------------------------------------------------
 | Tool                                | confirm value     |

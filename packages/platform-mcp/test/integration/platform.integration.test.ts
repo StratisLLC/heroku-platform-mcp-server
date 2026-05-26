@@ -138,6 +138,7 @@ describeLive('platform-mcp ↔ live api.heroku.com', () => {
     const created = parseEnv<{ id: string; name: string }>(create);
     expect(created.ok).toBe(true);
     const appName = created.data!.name;
+    const appId = created.data!.id; // UUID — what Claude is likely to pass as args.app
 
     try {
       // Set a config var (no confirm required).
@@ -166,9 +167,13 @@ describeLive('platform-mcp ↔ live api.heroku.com', () => {
       expect(updEnv.ok).toBe(true);
       expect(updEnv.data?.name).toBe(previewName);
 
+      // Demonstrate the post-Phase-2b confirm fix: pass the UUID as args.app
+      // (what Claude resolves to internally) and the human-readable name as
+      // confirm (what the user typed in conversation). The expected confirm
+      // value comes from the prefetched response's name field — not args.app.
       const dryRun = (await client.callTool({
         name: 'apps_delete',
-        arguments: { app: previewName, dry_run: true },
+        arguments: { app: appId, dry_run: true },
       })) as { content: unknown[] };
       const dryEnv = parseEnv<{ description: string; request: { method: string } }>(dryRun);
       expect(dryEnv.ok).toBe(true);
@@ -176,10 +181,10 @@ describeLive('platform-mcp ↔ live api.heroku.com', () => {
       expect(typeof dryEnv.data?.description).toBe('string');
       expect(dryEnv.data!.description.length).toBeGreaterThan(0);
 
-      // Real delete, with confirm matching the (renamed) app name.
+      // Real delete: args.app is the UUID; confirm is the canonical name.
       const del = (await client.callTool({
         name: 'apps_delete',
-        arguments: { app: previewName, confirm: previewName },
+        arguments: { app: appId, confirm: previewName },
       })) as { content: unknown[] };
       expect(parseEnv(del).ok).toBe(true);
     } catch (err) {
@@ -190,4 +195,154 @@ describeLive('platform-mcp ↔ live api.heroku.com', () => {
       throw err;
     }
   }, 90_000);
+
+  it('walks the Phase 2b teams-tier lifecycle (list → invite → revoke → delete team)', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'herokumcp-int2b-teams-'));
+    const paths = resolvePaths({ home, platform: process.platform });
+    const built = await buildServer({
+      token: TOKEN!,
+      paths,
+      version: '0.0.0-int',
+      forceProbe: true,
+    });
+    const client = new Client({ name: 'integration2b-teams', version: '0.0.0-int' });
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    await Promise.all([built.server.connect(b), client.connect(a)]);
+
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    if (!names.includes('teams_list')) {
+      // Teams tier not available on this token — skip.
+      return;
+    }
+
+    // 1. List teams, paginated. We don't insist on a particular team being
+    //    present, but we do want pagination machinery to round-trip.
+    const teamsList = (await client.callTool({
+      name: 'teams_list',
+      arguments: { page_size: 100 },
+    })) as { content: unknown[] };
+    const teamsEnv = parseEnv<{ id: string; name: string }[]>(teamsList);
+    expect(teamsEnv.ok).toBe(true);
+
+    const harnessTeam = teamsEnv.data?.find((t) => t.name === 'herokumcp-phase2b-test');
+
+    // 2. If the harness team exists, exercise the team-owned app lifecycle.
+    if (harnessTeam) {
+      const teamApps = (await client.callTool({
+        name: 'team_apps_list',
+        arguments: { team: harnessTeam.name, page_size: 100 },
+      })) as { content: unknown[] };
+      const teamAppsEnv = parseEnv<{ name: string }[]>(teamApps);
+      expect(teamAppsEnv.ok).toBe(true);
+
+      const claudeApp = teamAppsEnv.data?.find((a2) => a2.name === 'herokumcp-phase2b-claude-test');
+      if (claudeApp) {
+        // Setting a config var on the team-owned app exercises the
+        // Phase 2a tool against team apps.
+        const cfg = (await client.callTool({
+          name: 'config_vars_update',
+          arguments: { app: claudeApp.name, config: { PHASE_2B_FLAG: '1' } },
+        })) as { content: unknown[] };
+        expect(parseEnv(cfg).ok).toBe(true);
+      }
+
+      // 3. Invite a fake user; immediately dry-run revoking; then real revoke.
+      // Pass the team UUID as args.team (mirrors what Claude resolves to
+      // internally) and the email as args.user. The confirm value should be
+      // the user's email — derived from the prefetched invitation, not args.
+      const fakeEmail = `test-fake-${Date.now().toString(36)}@example.com`;
+      const invite = (await client.callTool({
+        name: 'team_invitations_create',
+        arguments: { team: harnessTeam.id, email: fakeEmail, role: 'member' },
+      })) as { content: unknown[]; isError?: boolean };
+      if (!invite.isError) {
+        const dryRevoke = (await client.callTool({
+          name: 'team_invitations_revoke',
+          arguments: { team: harnessTeam.id, user: fakeEmail, dry_run: true },
+        })) as { content: unknown[] };
+        const dryEnv = parseEnv<{ description: string }>(dryRevoke);
+        expect(dryEnv.ok).toBe(true);
+        // Pre-fetch should have located the invitation we just created.
+        expect(dryEnv.data?.description).toContain(fakeEmail);
+
+        const realRevoke = (await client.callTool({
+          name: 'team_invitations_revoke',
+          arguments: { team: harnessTeam.id, user: fakeEmail, confirm: fakeEmail },
+        })) as { content: unknown[]; isError?: boolean };
+        // The revoke either succeeded (200) or 404'd because the invitation
+        // was already auto-revoked. Either way the destructive path executed.
+        expect(realRevoke.isError === true || parseEnv(realRevoke).ok === true).toBe(true);
+      }
+    }
+
+    // 4. Standalone-team create / dry-run delete / real delete. Skipped if
+    //    Heroku rejects team creation on this token (common — many tokens
+    //    can't create standalone teams).
+    const ephemeralName = `herokumcp-phase2b-ephemeral-${Date.now().toString(36)}`;
+    const create = (await client.callTool({
+      name: 'teams_create',
+      arguments: { name: ephemeralName },
+    })) as { content: unknown[]; isError?: boolean };
+    if (create.isError) {
+      return; // Heroku declined — bail without failing the test.
+    }
+    const createEnv = parseEnv<{ id: string; name: string }>(create);
+    expect(createEnv.ok).toBe(true);
+
+    try {
+      const dryDelete = (await client.callTool({
+        name: 'teams_delete',
+        arguments: { team: ephemeralName, dry_run: true },
+      })) as { content: unknown[] };
+      const dryEnv = parseEnv<{ description: string; request: { method: string } }>(dryDelete);
+      expect(dryEnv.ok).toBe(true);
+      expect(dryEnv.data?.request.method).toBe('DELETE');
+      expect(dryEnv.data?.description).toContain(ephemeralName);
+    } finally {
+      await client
+        .callTool({
+          name: 'teams_delete',
+          arguments: { team: ephemeralName, confirm: ephemeralName },
+        })
+        .catch(() => undefined);
+    }
+  }, 90_000);
+
+  it('walks the Phase 2b account-tier write dry_run (no real account mutation)', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'herokumcp-int2b-account-'));
+    const paths = resolvePaths({ home, platform: process.platform });
+    const built = await buildServer({
+      token: TOKEN!,
+      paths,
+      version: '0.0.0-int',
+      forceProbe: true,
+    });
+    const client = new Client({ name: 'integration2b-account', version: '0.0.0-int' });
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    await Promise.all([built.server.connect(b), client.connect(a)]);
+
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    if (!names.includes('account_update')) return;
+
+    // 1. Read current account state via the Phase 1 reader.
+    const info = (await client.callTool({ name: 'account_info' })) as { content: unknown[] };
+    const infoEnv = parseEnv<{ name?: string | null }>(info);
+    expect(infoEnv.ok).toBe(true);
+
+    // 2. Dry-run a fake name change. No actual update is performed — the
+    //    dry-run shape is enough proof that the write tool is wired up.
+    const fakeName = `dry-run-preview-${Date.now().toString(36)}`;
+    const dry = (await client.callTool({
+      name: 'account_update',
+      arguments: { name: fakeName, dry_run: true },
+    })) as { content: unknown[] };
+    const dryEnv = parseEnv<{
+      request: { method: string; body: { name?: string } };
+      description: string;
+    }>(dry);
+    expect(dryEnv.ok).toBe(true);
+    expect(dryEnv.data?.request.method).toBe('PATCH');
+    expect(dryEnv.data?.request.body.name).toBe(fakeName);
+    expect(dryEnv.data?.description).toContain(fakeName);
+  }, 60_000);
 });

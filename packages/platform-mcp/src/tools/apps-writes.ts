@@ -94,7 +94,11 @@ export function registerAppsWriteTools(server: McpServer, ctx: ToolContext): voi
     description:
       'Destroy an app. Irreversible: all dynos, add-ons, config vars, and releases are removed. Wraps DELETE /apps/{id_or_name}. Destructive: pass confirm matching the app name.',
     inputSchema: appOnly,
-    destructive: { targetKind: 'app', expectedFrom: (args) => args.app },
+    destructive: {
+      targetKind: 'app',
+      expectedFromResource: (resource) => pickAppName(resource),
+      expectedFromArgs: (args) => args.app,
+    },
     preFetch: {
       run: (args) =>
         ctx.client.get<HerokuRecord>(`/apps/${url(args.app)}`, { tool: 'apps_delete' }),
@@ -119,7 +123,15 @@ export function registerAppsWriteTools(server: McpServer, ctx: ToolContext): voi
     description:
       'Disable Automated Certificate Management on an app. Wraps DELETE /apps/{id_or_name}/acm. Destructive: pass confirm matching the app name.',
     inputSchema: appOnly,
-    destructive: { targetKind: 'app', expectedFrom: (args) => args.app },
+    destructive: {
+      targetKind: 'app',
+      expectedFromResource: (resource) => pickAppName(resource),
+      expectedFromArgs: (args) => args.app,
+    },
+    preFetch: {
+      run: (args) =>
+        ctx.client.get<HerokuRecord>(`/apps/${url(args.app)}`, { tool: 'apps_disable_acm' }),
+    },
     build: (args) => ({ method: 'DELETE', path: `/apps/${url(args.app)}/acm` }),
     describe: (args) =>
       `Would disable ACM (Automated Certificate Management) on app '${args.app}'. Custom domains will fall back to manual certificate management.`,
@@ -184,4 +196,10 @@ function pickString(record: HerokuRecord, path: string[]): string | undefined {
     cur = (cur as Record<string, unknown>)[p];
   }
   return typeof cur === 'string' ? cur : undefined;
+}
+
+/** Extract the app's canonical name from a Heroku `/apps/{id_or_name}`
+ *  response. Exported via local re-use for the destructive-confirm gate. */
+function pickAppName(record: HerokuRecord): string | undefined {
+  return typeof record.name === 'string' ? record.name : undefined;
 }

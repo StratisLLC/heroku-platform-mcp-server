@@ -52,34 +52,55 @@ describe('releases-tier writes', () => {
     expect(JSON.parse(calls[0]?.body ?? '{}')).toEqual({ slug: 's-1', description: 'cut' });
   });
 
-  it('releases_rollback confirm targets the app name', async () => {
-    const { client, calls } = await spinUpServer({ capabilities: appsOnly, responses: [] });
+  it('releases_rollback confirm targets the app name (pre-fetches the app)', async () => {
+    const { client, calls } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        {
+          match: (url) => url === 'https://api.heroku.com/apps/demo',
+          body: { id: 'a-1', name: 'demo' },
+        },
+      ],
+    });
     // Wrong confirm (version, not app name).
     const reject = (await client.callTool({
       name: 'releases_rollback',
       arguments: { app: 'demo', release: 'v40', confirm: 'v40' },
     })) as { isError?: boolean };
     expect(reject.isError).toBe(true);
-    expect(calls).toHaveLength(0);
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0);
   });
 
-  it('releases_rollback executes with correct confirm', async () => {
+  it('releases_rollback executes with correct confirm (from prefetched app name)', async () => {
     const { client, calls } = await spinUpServer({
       capabilities: appsOnly,
       responses: [
         {
           match: (url, init) =>
-            url === 'https://api.heroku.com/apps/demo/releases' && init?.method === 'POST',
+            url === 'https://api.heroku.com/apps/2925e383-d2f8-4d2c-9c2e-000000000000' &&
+            init?.method === 'GET',
+          body: { id: '2925e383-d2f8-4d2c-9c2e-000000000000', name: 'demo' },
+        },
+        {
+          match: (url, init) =>
+            url === 'https://api.heroku.com/apps/2925e383-d2f8-4d2c-9c2e-000000000000/releases' &&
+            init?.method === 'POST',
           body: { id: 'r-2', version: 43 },
         },
       ],
     });
+    // Model passes UUID as args.app; user typed the app's name as confirm.
     const result = (await client.callTool({
       name: 'releases_rollback',
-      arguments: { app: 'demo', release: 'v40', confirm: 'demo' },
+      arguments: {
+        app: '2925e383-d2f8-4d2c-9c2e-000000000000',
+        release: 'v40',
+        confirm: 'demo',
+      },
     })) as { content: unknown[] };
     expect(parseEnvelope(result).ok).toBe(true);
-    expect(JSON.parse(calls[0]?.body ?? '{}')).toEqual({ release: 'v40' });
+    const post = calls.find((c) => c.method === 'POST')!;
+    expect(JSON.parse(post.body ?? '{}')).toEqual({ release: 'v40' });
   });
 
   it('builds_create posts source_blob and optional buildpacks', async () => {
@@ -151,13 +172,21 @@ describe('releases-tier writes', () => {
     expect(calls[0]?.method).toBe('POST');
   });
 
-  it('builds_delete_cache requires confirm matching app name', async () => {
-    const { client, calls } = await spinUpServer({ capabilities: appsOnly, responses: [] });
+  it('builds_delete_cache requires confirm matching the prefetched app name', async () => {
+    const { client, calls } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        {
+          match: (url) => url === 'https://api.heroku.com/apps/demo',
+          body: { id: 'a-1', name: 'demo' },
+        },
+      ],
+    });
     const result = (await client.callTool({
       name: 'builds_delete_cache',
       arguments: { app: 'demo' },
     })) as { isError?: boolean };
     expect(result.isError).toBe(true);
-    expect(calls).toHaveLength(0);
+    expect(calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
   });
 });

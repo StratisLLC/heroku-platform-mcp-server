@@ -51,13 +51,13 @@ describe('logs-tier writes', () => {
     expect(JSON.parse(calls[0]?.body ?? '{}')).toEqual({ url: 'syslog://logs.example.com' });
   });
 
-  it('log_drains_delete requires confirm matching the app name; pre-fetches', async () => {
+  it('log_drains_delete pre-fetches the parent app (for canonical-name confirm)', async () => {
     const { client, calls } = await spinUpServer({
       capabilities: appsOnly,
       responses: [
         {
-          match: (url) => url === 'https://api.heroku.com/apps/demo/log-drains/ld-1',
-          body: { id: 'ld-1', url: 'syslog://logs.example.com' },
+          match: (url) => url === 'https://api.heroku.com/apps/demo',
+          body: { id: 'a-1', name: 'demo' },
         },
       ],
     });
@@ -67,19 +67,58 @@ describe('logs-tier writes', () => {
     })) as { content: unknown[] };
     const env = parseEnvelope<{ description: string }>(result);
     expect(env.ok).toBe(true);
-    expect(env.data?.description).toContain('syslog://logs.example.com');
+    expect(env.data?.description).toContain('ld-1');
+    expect(env.data?.description).toContain('demo');
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe('GET');
   });
 
-  it('telemetry_drains_delete confirm target is the drain id', async () => {
-    const { client, calls } = await spinUpServer({ capabilities: appsOnly, responses: [] });
+  it('log_drains_delete accepts confirm matching the prefetched app name even when args.app is a UUID', async () => {
+    const { client, calls } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        {
+          match: (url) =>
+            url === 'https://api.heroku.com/apps/2925e383-d2f8-4d2c-9c2e-000000000000',
+          body: { id: '2925e383-d2f8-4d2c-9c2e-000000000000', name: 'demo' },
+        },
+        {
+          match: (url, init) =>
+            url ===
+              'https://api.heroku.com/apps/2925e383-d2f8-4d2c-9c2e-000000000000/log-drains/ld-1' &&
+            init?.method === 'DELETE',
+          body: { id: 'ld-1' },
+        },
+      ],
+    });
+    const result = (await client.callTool({
+      name: 'log_drains_delete',
+      arguments: {
+        app: '2925e383-d2f8-4d2c-9c2e-000000000000',
+        drain: 'ld-1',
+        confirm: 'demo',
+      },
+    })) as { content: unknown[] };
+    expect(parseEnvelope(result).ok).toBe(true);
+    expect(calls.filter((c) => c.method === 'DELETE')).toHaveLength(1);
+  });
+
+  it('telemetry_drains_delete confirm target is the drain id (no human name)', async () => {
+    const { client, calls } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        {
+          match: (url) => url === 'https://api.heroku.com/telemetry-drains/td-uuid',
+          body: { id: 'td-uuid', exporter: { endpoint: 'https://otel.example.com' } },
+        },
+      ],
+    });
     const result = (await client.callTool({
       name: 'telemetry_drains_delete',
       arguments: { id: 'td-uuid', confirm: 'wrong' },
     })) as { isError?: boolean };
     expect(result.isError).toBe(true);
-    expect(calls).toHaveLength(0);
+    expect(calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
   });
 
   it('telemetry_drains_update PATCHes /telemetry-drains/{id}', async () => {

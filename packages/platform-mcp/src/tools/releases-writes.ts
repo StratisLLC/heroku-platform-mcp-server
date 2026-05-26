@@ -121,7 +121,16 @@ export function registerReleasesWriteTools(server: McpServer, ctx: ToolContext):
     description:
       'Roll the app back to a prior release version. Wraps POST /apps/{id_or_name}/releases with the prior release id. Destructive: pass confirm matching the app name (not the version), because the rollback affects the live app.',
     inputSchema: releasesRollbackShape,
-    destructive: { targetKind: 'app', expectedFrom: (args) => args.app },
+    destructive: {
+      targetKind: 'app',
+      expectedFromResource: (resource) =>
+        typeof resource?.name === 'string' ? resource.name : undefined,
+      expectedFromArgs: (args) => args.app,
+    },
+    preFetch: {
+      run: (args) =>
+        ctx.client.get<HerokuRecord>(`/apps/${url(args.app)}`, { tool: 'releases_rollback' }),
+    },
     build: (args) => ({
       method: 'POST',
       path: `/apps/${url(args.app)}/releases`,
@@ -151,7 +160,16 @@ export function registerReleasesWriteTools(server: McpServer, ctx: ToolContext):
     description:
       'Purge the buildpack cache for an app. Next deploy will rebuild from scratch. Wraps DELETE /apps/{id_or_name}/build-cache. Destructive: pass confirm matching the app name.',
     inputSchema: appInput,
-    destructive: { targetKind: 'app', expectedFrom: (args) => args.app },
+    destructive: {
+      targetKind: 'app',
+      expectedFromResource: (resource) =>
+        typeof resource?.name === 'string' ? resource.name : undefined,
+      expectedFromArgs: (args) => args.app,
+    },
+    preFetch: {
+      run: (args) =>
+        ctx.client.get<HerokuRecord>(`/apps/${url(args.app)}`, { tool: 'builds_delete_cache' }),
+    },
     build: (args) => ({ method: 'DELETE', path: `/apps/${url(args.app)}/build-cache` }),
     describe: (args) =>
       `Would purge the buildpack cache for app '${args.app}'. The next build will be slower because dependencies must be re-fetched.`,

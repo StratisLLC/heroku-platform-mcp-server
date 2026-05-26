@@ -76,14 +76,22 @@ describe('domains-tier writes', () => {
     expect(calls[0]?.method).toBe('GET');
   });
 
-  it('domains_delete rejects when confirm does not match the hostname', async () => {
-    const { client, calls } = await spinUpServer({ capabilities: appsOnly, responses: [] });
+  it('domains_delete rejects when confirm does not match the prefetched hostname', async () => {
+    const { client, calls } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        {
+          match: (url) => url === 'https://api.heroku.com/apps/demo/domains/www.example.com',
+          body: { id: 'd-1', hostname: 'www.example.com' },
+        },
+      ],
+    });
     const result = (await client.callTool({
       name: 'domains_delete',
       arguments: { app: 'demo', domain: 'www.example.com', confirm: 'demo' },
     })) as { isError?: boolean };
     expect(result.isError).toBe(true);
-    expect(calls).toHaveLength(0);
+    expect(calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
   });
 
   it('sni_endpoints_create sends certificate_chain + private_key in the body', async () => {

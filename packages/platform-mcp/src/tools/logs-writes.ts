@@ -124,20 +124,27 @@ export function registerLogsWriteTools(server: McpServer, ctx: ToolContext): voi
     description:
       'Remove a log drain from an app. Wraps DELETE /apps/{id_or_name}/log-drains/{id_or_url_or_token}. Destructive: pass confirm matching the app name.',
     inputSchema: logDrainsDeleteShape,
-    destructive: { targetKind: 'drain', expectedFrom: (args) => args.app },
+    destructive: {
+      targetKind: 'drain',
+      // log_drains_delete confirms on the *app* name (per Phase 2a Decision),
+      // so we fetch the parent app instead of the drain itself.
+      expectedFromResource: (resource) =>
+        typeof resource?.name === 'string' ? resource.name : undefined,
+      expectedFromArgs: (args) => args.app,
+    },
     preFetch: {
       run: (args) =>
-        ctx.client.get<HerokuRecord>(`/apps/${url(args.app)}/log-drains/${url(args.drain)}`, {
-          tool: 'log_drains_delete',
-        }),
+        ctx.client.get<HerokuRecord>(`/apps/${url(args.app)}`, { tool: 'log_drains_delete' }),
     },
     build: (args) => ({
       method: 'DELETE',
       path: `/apps/${url(args.app)}/log-drains/${url(args.drain)}`,
     }),
     describe: (args, fetched) => {
-      const target = typeof fetched?.url === 'string' ? fetched.url : args.drain;
-      return `Would remove log drain '${target}' from app '${args.app}'. Forwarded log delivery stops immediately.`;
+      // `fetched` is now the parent app (so we can derive the confirm name).
+      // The drain identifier from input is the most useful thing to surface.
+      const appName = typeof fetched?.name === 'string' ? fetched.name : args.app;
+      return `Would remove log drain '${args.drain}' from app '${appName}'. Forwarded log delivery stops immediately.`;
     },
   });
 
@@ -179,7 +186,13 @@ export function registerLogsWriteTools(server: McpServer, ctx: ToolContext): voi
     description:
       'Remove a telemetry drain. Wraps DELETE /telemetry-drains/{id}. Destructive: pass confirm matching the drain id.',
     inputSchema: telemetryDrainsDeleteShape,
-    destructive: { targetKind: 'drain', expectedFrom: (args) => args.id },
+    destructive: {
+      targetKind: 'drain',
+      // Telemetry drains have no human-readable name; the UUID is canonical.
+      expectedFromResource: (resource) =>
+        typeof resource?.id === 'string' ? resource.id : undefined,
+      expectedFromArgs: (args) => args.id,
+    },
     preFetch: {
       run: (args) =>
         ctx.client.get<HerokuRecord>(`/telemetry-drains/${url(args.id)}`, {

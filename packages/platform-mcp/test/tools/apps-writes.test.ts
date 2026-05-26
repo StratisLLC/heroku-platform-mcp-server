@@ -62,10 +62,15 @@ describe('apps-tier writes', () => {
     });
   });
 
-  it('apps_delete rejects when confirm is missing', async () => {
+  it('apps_delete rejects when confirm is missing (pre-fetches the app to derive the canonical name)', async () => {
     const { client, calls } = await spinUpServer({
       capabilities: appsOnly,
-      responses: [], // no HTTP call should happen
+      responses: [
+        {
+          match: (url) => url === 'https://api.heroku.com/apps/demo',
+          body: { id: 'a-1', name: 'demo' },
+        },
+      ],
     });
     const result = (await client.callTool({
       name: 'apps_delete',
@@ -78,11 +83,19 @@ describe('apps-tier writes', () => {
     expect((env.error?.details as { expected?: string }).expected).toBe('demo');
     expect((env.error?.details as { target_kind?: string }).target_kind).toBe('app');
     expect((env.error?.details as { kind?: string }).kind).toBe('confirmation_required');
-    expect(calls).toHaveLength(0);
+    expect(calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
   });
 
   it('apps_delete rejects when confirm is mismatched', async () => {
-    const { client, calls } = await spinUpServer({ capabilities: appsOnly, responses: [] });
+    const { client, calls } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        {
+          match: (url) => url === 'https://api.heroku.com/apps/demo',
+          body: { id: 'a-1', name: 'demo' },
+        },
+      ],
+    });
     const result = (await client.callTool({
       name: 'apps_delete',
       arguments: { app: 'demo', confirm: 'oops' },
@@ -90,17 +103,76 @@ describe('apps-tier writes', () => {
     expect(result.isError).toBe(true);
     const env = parseEnvelope(result);
     expect(env.error?.kind).toBe('confirmation');
-    expect(calls).toHaveLength(0);
+    expect(calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
   });
 
   it('apps_delete is case-sensitive on confirm', async () => {
-    const { client, calls } = await spinUpServer({ capabilities: appsOnly, responses: [] });
+    const { client, calls } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        {
+          match: (url) => url === 'https://api.heroku.com/apps/demo',
+          body: { id: 'a-1', name: 'demo' },
+        },
+      ],
+    });
     const result = (await client.callTool({
       name: 'apps_delete',
       arguments: { app: 'demo', confirm: 'Demo' },
     })) as { content: unknown[]; isError?: boolean };
     expect(result.isError).toBe(true);
-    expect(calls).toHaveLength(0);
+    expect(calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
+  });
+
+  it('apps_delete rejects when confirm echoes the input UUID instead of the canonical name', async () => {
+    const { client, calls } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        {
+          match: (url) =>
+            url === 'https://api.heroku.com/apps/2925e383-d2f8-4d2c-9c2e-000000000000',
+          body: { id: '2925e383-d2f8-4d2c-9c2e-000000000000', name: 'demo' },
+        },
+      ],
+    });
+    const result = (await client.callTool({
+      name: 'apps_delete',
+      arguments: {
+        app: '2925e383-d2f8-4d2c-9c2e-000000000000',
+        confirm: '2925e383-d2f8-4d2c-9c2e-000000000000',
+      },
+    })) as { content: unknown[]; isError?: boolean };
+    expect(result.isError).toBe(true);
+    const env = parseEnvelope(result);
+    expect(env.error?.kind).toBe('confirmation');
+    expect((env.error?.details as { expected?: string }).expected).toBe('demo');
+    expect(calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
+  });
+
+  it('apps_delete accepts confirm matching the canonical app name even when the model passed a UUID as args.app', async () => {
+    const { client, calls } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        {
+          match: (url, init) =>
+            url === 'https://api.heroku.com/apps/2925e383-d2f8-4d2c-9c2e-000000000000' &&
+            init?.method === 'GET',
+          body: { id: '2925e383-d2f8-4d2c-9c2e-000000000000', name: 'demo' },
+        },
+        {
+          match: (url, init) =>
+            url === 'https://api.heroku.com/apps/2925e383-d2f8-4d2c-9c2e-000000000000' &&
+            init?.method === 'DELETE',
+          body: { id: '2925e383-d2f8-4d2c-9c2e-000000000000', name: 'demo' },
+        },
+      ],
+    });
+    const result = (await client.callTool({
+      name: 'apps_delete',
+      arguments: { app: '2925e383-d2f8-4d2c-9c2e-000000000000', confirm: 'demo' },
+    })) as { content: unknown[] };
+    expect(parseEnvelope(result).ok).toBe(true);
+    expect(calls.filter((c) => c.method === 'DELETE')).toHaveLength(1);
   });
 
   it('apps_delete dry_run pre-fetches and returns a descriptive preview', async () => {
@@ -167,6 +239,11 @@ describe('apps-tier writes', () => {
       responses: [
         {
           match: (url, init) =>
+            url === 'https://api.heroku.com/apps/demo' && init?.method === 'GET',
+          body: { id: 'a-1', name: 'demo' },
+        },
+        {
+          match: (url, init) =>
             url === 'https://api.heroku.com/apps/demo' && init?.method === 'DELETE',
           body: { id: 'a-1', name: 'demo' },
         },
@@ -179,8 +256,7 @@ describe('apps-tier writes', () => {
     const env = parseEnvelope<{ id: string; name: string }>(result);
     expect(env.ok).toBe(true);
     expect(env.data?.name).toBe('demo');
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.method).toBe('DELETE');
+    expect(calls.filter((c) => c.method === 'DELETE')).toHaveLength(1);
   });
 
   it('apps_delete: dry_run wins over a correct confirm (no real request issued)', async () => {
@@ -262,14 +338,22 @@ describe('apps-tier writes', () => {
     expect(calls[0]?.method).toBe('POST');
   });
 
-  it('apps_disable_acm is destructive and requires confirm', async () => {
-    const { client, calls } = await spinUpServer({ capabilities: appsOnly, responses: [] });
+  it('apps_disable_acm is destructive and requires confirm matching the prefetched app name', async () => {
+    const { client, calls } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        {
+          match: (url) => url === 'https://api.heroku.com/apps/demo',
+          body: { id: 'a-1', name: 'demo' },
+        },
+      ],
+    });
     const result = (await client.callTool({
       name: 'apps_disable_acm',
       arguments: { app: 'demo' },
     })) as { content: unknown[]; isError?: boolean };
     expect(result.isError).toBe(true);
-    expect(calls).toHaveLength(0);
+    expect(calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
   });
 
   it('apps_update rejects invalid params before any HTTP call', async () => {

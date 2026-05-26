@@ -66,13 +66,35 @@ export interface WriteRequest {
   headers?: Record<string, string>;
 }
 
-/** Marker for destructive tools. */
-export interface DestructiveSpec<Args> {
+/** Marker for destructive tools.
+ *
+ *  The expected `confirm` value is derived from the prefetched resource's
+ *  canonical identifier field — the human-readable name the user typed in
+ *  conversation (e.g. an app's name, a collaborator's email, a key's
+ *  fingerprint) — NOT from the input arg. The model can pass either the UUID
+ *  or the name as input; the user only ever sees and types the canonical name.
+ *  This ensures the confirm gate captures real user intent rather than echoing
+ *  whatever opaque id the model resolved internally. See
+ *  notes/divergences.md #32.
+ *
+ *  At least one of {@link expectedFromResource} or {@link expectedFromArgs}
+ *  must be provided. When both are present and `preFetch` runs successfully,
+ *  `expectedFromResource` takes precedence; `expectedFromArgs` serves as the
+ *  fallback for tools where the pre-fetch may legitimately return nothing
+ *  (list-and-filter pre-fetches; race conditions between dry-run and the real
+ *  call). Tools with no `preFetch` use `expectedFromArgs` only.
+ */
+export interface DestructiveSpec<Args, Resource = unknown> {
   /** Resource kind used in the confirmation_required envelope. */
   targetKind: ConfirmTargetKind;
-  /** Function that derives the expected confirm value from the caller's
-   *  inputs. The model must pass exactly this as `confirm`. */
-  expectedFrom: (args: Args) => string;
+  /** Extract the canonical name from the prefetched resource. Preferred path:
+   *  the user's confirm matches what Heroku returns, not what was passed in.
+   *  May return `undefined`/empty when the resource lacks the field, in which
+   *  case {@link expectedFromArgs} is used as a fallback. */
+  expectedFromResource?: (resource: Resource) => string | undefined;
+  /** Extract from input args. Used when no preFetch is configured, or as a
+   *  fallback when the pre-fetch returns no matching record. */
+  expectedFromArgs?: (args: Args) => string;
 }
 
 /** Optional pre-fetch step for DELETE dry-runs (Decision 6). */
@@ -95,7 +117,7 @@ export interface WriteToolConfig<Shape extends ZodRawShape, Fetched = unknown> {
    *  auto-added; do NOT include them here. */
   inputSchema: Shape;
   /** Marker present iff the tool is destructive. */
-  destructive?: DestructiveSpec<ShapeArgs<Shape>>;
+  destructive?: DestructiveSpec<ShapeArgs<Shape>, Fetched>;
   /** Optional pre-fetch step for delete-style operations. Runs during
    *  `dry_run: true`. */
   preFetch?: PreFetchSpec<ShapeArgs<Shape>, Fetched>;
@@ -171,13 +193,19 @@ async function handleWrite<Shape extends ZodRawShape, Fetched>(
   const dryRun = args.dry_run === true;
   const confirmValue = args.confirm;
 
+  // Pre-fetch when configured. Runs on BOTH dry_run and the real call: on the
+  // real call we need the prefetched record to derive the expected confirm
+  // value (Decision: confirm matches the resource's canonical name, not the
+  // input arg — see notes/divergences.md #32). If the pre-fetch fails the
+  // error surfaces verbatim before we can determine what's being confirmed.
+  let fetched: Fetched | undefined;
+  if (config.preFetch) {
+    const result = await config.preFetch.run(args, ctx);
+    fetched = result.body;
+  }
+
   // Dry run: preview only. Skips the confirm check (Decision 4).
   if (dryRun) {
-    let fetched: Fetched | undefined;
-    if (config.preFetch) {
-      const result = await config.preFetch.run(args, ctx);
-      fetched = result.body;
-    }
     const req = config.build(args);
     const headers = mergeHeaders(req.headers);
     return envelopeFromLocal(
@@ -194,11 +222,12 @@ async function handleWrite<Shape extends ZodRawShape, Fetched>(
   }
 
   // Not a dry run. If destructive, gate on `confirm`.
+  let expectedConfirm: string | undefined;
   if (config.destructive) {
-    const expected = config.destructive.expectedFrom(args);
+    expectedConfirm = resolveExpectedConfirm(config.destructive, args, fetched);
     assertConfirm({
       value: confirmValue,
-      expected,
+      expected: expectedConfirm,
       targetKind: config.destructive.targetKind,
     });
   }
@@ -206,9 +235,7 @@ async function handleWrite<Shape extends ZodRawShape, Fetched>(
   const req = config.build(args);
   const opts: Omit<RequestOptions, 'path' | 'method'> = { tool: config.name };
   if (req.headers !== undefined) opts.headers = req.headers;
-  const targetDesc = config.destructive
-    ? config.destructive.expectedFrom(args)
-    : describeTarget(req.path);
+  const targetDesc = expectedConfirm ?? describeTarget(req.path);
   if (targetDesc !== undefined) opts.target = targetDesc;
 
   const success = await ctx.client.request({
@@ -218,6 +245,29 @@ async function handleWrite<Shape extends ZodRawShape, Fetched>(
     ...(req.body !== undefined ? { body: req.body } : {}),
   });
   return envelopeFromClientSuccess(success);
+}
+
+/** Resolve the canonical confirm value for a destructive tool. Prefers the
+ *  prefetched resource's canonical name when available; falls back to the
+ *  input args when the pre-fetch didn't run, returned no matching record, or
+ *  the resource lacks a canonical name field. */
+function resolveExpectedConfirm<Args, Resource>(
+  destructive: DestructiveSpec<Args, Resource>,
+  args: Args,
+  fetched: Resource | undefined,
+): string {
+  if (fetched !== undefined && fetched !== null && destructive.expectedFromResource) {
+    const fromResource = destructive.expectedFromResource(fetched);
+    if (fromResource !== '' && fromResource !== undefined && fromResource !== null) {
+      return fromResource;
+    }
+  }
+  if (destructive.expectedFromArgs) {
+    return destructive.expectedFromArgs(args);
+  }
+  throw new Error(
+    'Destructive tool must declare expectedFromResource or expectedFromArgs (or both).',
+  );
 }
 
 /** Slightly opinionated description of the targeted resource — used for audit

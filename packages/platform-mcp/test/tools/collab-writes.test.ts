@@ -39,14 +39,23 @@ describe('collaborators + app transfers writes', () => {
     });
   });
 
-  it('collaborators_delete confirm target is the collaborator email', async () => {
-    const { client, calls } = await spinUpServer({ capabilities: appsOnly, responses: [] });
+  it('collaborators_delete confirm target is the prefetched collaborator email', async () => {
+    const { client, calls } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        {
+          match: (url) =>
+            url === 'https://api.heroku.com/apps/demo/collaborators/bob%40example.com',
+          body: { id: 'c-1', user: { email: 'bob@example.com', id: 'u-1' } },
+        },
+      ],
+    });
     const result = (await client.callTool({
       name: 'collaborators_delete',
       arguments: { app: 'demo', collaborator: 'bob@example.com', confirm: 'demo' },
     })) as { isError?: boolean };
     expect(result.isError).toBe(true);
-    expect(calls).toHaveLength(0);
+    expect(calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
   });
 
   it('collaborators_delete dry_run pre-fetches and surfaces created_at', async () => {
@@ -56,7 +65,11 @@ describe('collaborators + app transfers writes', () => {
         {
           match: (url) =>
             url === 'https://api.heroku.com/apps/demo/collaborators/bob%40example.com',
-          body: { id: 'c-1', created_at: '2024-04-01T00:00:00Z' },
+          body: {
+            id: 'c-1',
+            created_at: '2024-04-01T00:00:00Z',
+            user: { email: 'bob@example.com', id: 'u-1' },
+          },
         },
       ],
     });
@@ -92,10 +105,15 @@ describe('collaborators + app transfers writes', () => {
     });
   });
 
-  it('app_transfers_update confirm target is the app name (the transferred app)', async () => {
+  it('app_transfers_update confirm target is the prefetched app name', async () => {
     const { client, calls } = await spinUpServer({
       capabilities: appsOnly,
       responses: [
+        {
+          match: (url, init) =>
+            url === 'https://api.heroku.com/account/app-transfers/t-1' && init?.method === 'GET',
+          body: { id: 't-1', state: 'pending', app: { id: 'a-1', name: 'demo' } },
+        },
         {
           match: (url, init) =>
             url === 'https://api.heroku.com/account/app-transfers/t-1' && init?.method === 'PATCH',
@@ -103,7 +121,7 @@ describe('collaborators + app transfers writes', () => {
         },
       ],
     });
-    // Wrong confirm.
+    // Wrong confirm — the transfer id rather than the app name.
     const reject = (await client.callTool({
       name: 'app_transfers_update',
       arguments: { transfer: 't-1', state: 'accepted', app: 'demo', confirm: 't-1' },

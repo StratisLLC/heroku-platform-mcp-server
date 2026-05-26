@@ -131,7 +131,16 @@ export function registerFormationWriteTools(server: McpServer, ctx: ToolContext)
     description:
       'Restart a single dyno on an app. Wraps DELETE /apps/{id_or_name}/dynos/{id_or_name}. Destructive: pass confirm matching the app name.',
     inputSchema: dynosRestartShape,
-    destructive: { targetKind: 'dyno', expectedFrom: (args) => args.app },
+    destructive: {
+      targetKind: 'dyno',
+      expectedFromResource: (resource) =>
+        typeof resource?.name === 'string' ? resource.name : undefined,
+      expectedFromArgs: (args) => args.app,
+    },
+    preFetch: {
+      run: (args) =>
+        ctx.client.get<HerokuRecord>(`/apps/${url(args.app)}`, { tool: 'dynos_restart' }),
+    },
     build: (args) => ({
       method: 'DELETE',
       path: `/apps/${url(args.app)}/dynos/${url(args.dyno)}`,
@@ -146,7 +155,16 @@ export function registerFormationWriteTools(server: McpServer, ctx: ToolContext)
     description:
       'Restart every dyno on an app. Wraps DELETE /apps/{id_or_name}/dynos. Destructive: pass confirm matching the app name. Briefly interrupts service across all process types.',
     inputSchema: appInput,
-    destructive: { targetKind: 'app', expectedFrom: (args) => args.app },
+    destructive: {
+      targetKind: 'app',
+      expectedFromResource: (resource) =>
+        typeof resource?.name === 'string' ? resource.name : undefined,
+      expectedFromArgs: (args) => args.app,
+    },
+    preFetch: {
+      run: (args) =>
+        ctx.client.get<HerokuRecord>(`/apps/${url(args.app)}`, { tool: 'dynos_restart_all' }),
+    },
     build: (args) => ({ method: 'DELETE', path: `/apps/${url(args.app)}/dynos` }),
     describe: (args) =>
       `Would restart all dynos on app '${args.app}'. Every process type is briefly unavailable.`,
@@ -158,7 +176,18 @@ export function registerFormationWriteTools(server: McpServer, ctx: ToolContext)
     description:
       'Stop a single dyno (web, worker, or one-off). Wraps POST /apps/{id_or_name}/dynos/{id_or_name}/actions/stop. Destructive: pass confirm matching the dyno name (not the app name).',
     inputSchema: dynosStopShape,
-    destructive: { targetKind: 'dyno', expectedFrom: (args) => args.dyno },
+    destructive: {
+      targetKind: 'dyno',
+      expectedFromResource: (resource) =>
+        typeof resource?.name === 'string' ? resource.name : undefined,
+      expectedFromArgs: (args) => args.dyno,
+    },
+    preFetch: {
+      run: (args) =>
+        ctx.client.get<HerokuRecord>(`/apps/${url(args.app)}/dynos/${url(args.dyno)}`, {
+          tool: 'dynos_stop',
+        }),
+    },
     build: (args) => ({
       method: 'POST',
       path: `/apps/${url(args.app)}/dynos/${url(args.dyno)}/actions/stop`,

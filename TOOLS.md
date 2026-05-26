@@ -42,36 +42,38 @@ The per-tool expected `confirm` value is documented in the Params column where t
 
 ## Tier: `account`
 
+> Account deletion is intentionally not exposed; use the Heroku Dashboard. The Heroku `DELETE /account` endpoint requires the user's password as a header and has dangerous consequences, so it's omitted by design (Phase 2b Decision 1).
+
 | Tool | Wraps | Params |
 |---|---|---|
 | `account_info` | `GET /account` | — |
-| `account_update` | `PATCH /account` | `name?`, `beta?`, `allow_tracking?` 🧪 |
-| `account_delete` ⚠🔒 | `DELETE /account` | `confirm: <email>`, `password: string` |
+| `account_update` 🧪 | `PATCH /account` | `name?`, `beta?`, `allow_tracking?` |
 | `account_delinquency_info` | `GET /account/delinquency` | — |
 | `account_features_list` 📄 | `GET /account/features` | — |
-| `account_features_update` | `PATCH /account/features/{id_or_name}` | `feature: string`, `enabled: boolean` 🧪 |
+| `account_features_update` 🧪 | `PATCH /account/features/{id_or_name}` | `feature: string`, `enabled: boolean` |
 | `account_sms_number_get` | `GET /account/sms-number` | — |
-| `account_sms_number_recover` | `POST /account/sms-number/actions/recover` | — |
+| `account_sms_number_recover` 🧪 | `POST /account/sms-number/actions/recover` | — |
 | `keys_list` 📄 | `GET /account/keys` | — |
 | `keys_info` | `GET /account/keys/{id_or_fingerprint}` | `key: string` |
-| `keys_create` | (deprecated by Heroku; surface as note) | — |
-| `keys_delete` ⚠ | `DELETE /account/keys/{id_or_fingerprint}` | `key: string`, `confirm: <fingerprint>` |
+| `keys_create` 🧪 | `POST /account/keys` | `public_key: string` |
+| `keys_delete` ⚠🧪 | `DELETE /account/keys/{id_or_fingerprint}` | `key: string`, `fingerprint: string`, `confirm: <fingerprint>` |
 | `oauth_authorizations_list` 📄 | `GET /oauth/authorizations` | — |
 | `oauth_authorizations_info` | `GET /oauth/authorizations/{id}` | `id: string` |
-| `oauth_authorizations_create` | `POST /oauth/authorizations` | `description?`, `scope?: string[]`, `expires_in?: number` 🧪 |
-| `oauth_authorizations_delete` ⚠ | `DELETE /oauth/authorizations/{id}` | `id: string`, `confirm: <description-or-id>` |
-| `oauth_authorizations_regenerate` ⚠ | `POST /oauth/authorizations/{id}/actions/regenerate-tokens` | `id: string`, `confirm: <id>` |
+| `oauth_authorizations_create` 🧪 | `POST /oauth/authorizations` | `description?`, `scope?: string[]`, `expires_in?: number`, `client?: string` |
+| `oauth_authorizations_delete` ⚠🧪 | `DELETE /oauth/authorizations/{id}` | `id: string`, `confirm_target: string`, `confirm: <description-or-id>` |
+| `oauth_authorizations_regenerate` ⚠🧪 | `POST /oauth/authorizations/{id}/actions/regenerate-tokens` | `id: string`, `confirm: <id>` |
 | `oauth_clients_list` 📄 | `GET /oauth/clients` | — |
 | `oauth_clients_info` | `GET /oauth/clients/{id}` | — |
-| `oauth_tokens_create` | `POST /oauth/tokens` | grant + client + refresh_token params |
 | `invoices_list` 📄 | `GET /account/invoices` | — |
 | `invoices_info` | `GET /account/invoices/{number}` | `number: number` |
 | `invoice_address_info` | `GET /account/invoice-address` | — |
-| `invoice_address_update` | `PUT /account/invoice-address` | address fields 🧪 |
+| `invoice_address_update` 🧪 | `PUT /account/invoice-address` | address fields |
 | `credits_list` 📄 | `GET /account/credits` | — |
-| `credits_create` | `POST /account/credits` | `code: string`, `amount: number` 🧪 |
+| `credits_create` 🧪 | `POST /account/credits` | `code: string`, `amount?: number` |
 | `user_preferences_get` | `GET /users/~/preferences` | — |
-| `user_preferences_update` | `PATCH /users/~/preferences` | preference fields 🧪 |
+| `user_preferences_update` 🧪 | `PATCH /users/~/preferences` | `preferences: object` |
+
+> `oauth_tokens_create` is a token-issuance flow used during OAuth grants and is intentionally deferred — it is not a typical "write the model performs" tool. The Partner MCP exposes the grant-exchange tools in Phase 4.
 
 ## Tier: `apps`
 
@@ -225,31 +227,39 @@ The per-tool expected `confirm` value is documented in the Params column where t
 
 ## Tier: `teams`
 
+> **Deprecation context for `teams_create` and `teams_delete`:** the Heroku CLI removed its `teams:create` and `teams:destroy` commands because Heroku now recommends creating/deleting teams through an Enterprise account dashboard (a separate endpoint at `POST /enterprise-accounts/{id}/teams`, exposed in a later phase). The Platform API endpoints these tools wrap still work and create/destroy standalone (non-enterprise) teams. Use these tools when the user specifically wants a standalone team; for enterprise users, prefer the enterprise team tools when they become available. The deprecation context is included verbatim in each tool's description.
+>
+> Phase 2b Decision 7: the teams tier lights up even when `teams.list` returns `200 []`. Tools that operate on individual teams (`teams_info`, `team_members_list`, etc.) return 404 from Heroku if called with a nonexistent team name; the existing error mapping surfaces those correctly.
+>
+> Phase 2b Decision 8: list-style tools in this tier (`teams_list`, `team_members_list`, etc.) all support pagination. Heroku's default page size on `/teams` is 25; pass `page_size` to retrieve larger batches in one call.
+>
+> Allowed add-on services live under the teams tier in the Platform API even though they're listed under `addons_consumer` for catalog completeness; the three `allowed_addon_services_*` tools below ship with the teams tier.
+
 | Tool | Wraps | Params |
 |---|---|---|
 | `teams_list` 📄 | `GET /teams` | — |
 | `teams_info` | `GET /teams/{id_or_name}` | `team` |
 | `teams_create` 🧪 | `POST /teams` | `name`, `address_1?`, etc. |
-| `teams_update` 🧪 | `PATCH /teams/{id_or_name}` | `team`, fields |
-| `teams_delete` ⚠ | `DELETE /teams/{id_or_name}` | `team`, `confirm: <name>` |
+| `teams_update` 🧪 | `PATCH /teams/{id_or_name}` | `team`, `name?`, `default?` |
+| `teams_delete` ⚠🧪 | `DELETE /teams/{id_or_name}` | `team`, `confirm: <name>` |
 | `team_members_list` 📄 | `GET /teams/{id_or_name}/members` | `team` |
-| `team_members_create_or_update` 🧪 | `PUT /teams/{id_or_name}/members` | `team`, `email`, `role` |
-| `team_members_delete` ⚠ | `DELETE /teams/{id_or_name}/members/{email_or_id}` | `team`, `member`, `confirm: <email>` |
+| `team_members_create_or_update` 🧪 | `PUT /teams/{id_or_name}/members` | `team`, `email`, `role`, `federated?` |
+| `team_members_delete` ⚠🧪 | `DELETE /teams/{id_or_name}/members/{email_or_id}` | `team`, `member`, `confirm: <email>` |
 | `team_members_apps_list` 📄 | `GET /teams/{id_or_name}/members/{email_or_id}/apps` | `team`, `member` |
 | `team_apps_list` 📄 | `GET /teams/{id_or_name}/apps` | `team` |
 | `team_apps_info` | `GET /teams/apps/{id_or_name}` | `app` |
-| `team_apps_create` 🧪 | `POST /teams/apps` | `team`, `name`, `locked`, … |
+| `team_apps_create` 🧪 | `POST /teams/apps` | `team`, `name?`, `region?`, `stack?`, `locked?`, … |
 | `team_apps_update_locked` 🧪 | `PATCH /teams/apps/{id_or_name}` | `app`, `locked` |
 | `team_apps_transfer` ⚠🧪 | `PATCH /teams/apps/{id_or_name}` | `app`, `owner`, `confirm: <app>` |
 | `team_app_collaborators_list` 📄 | `GET /teams/apps/{id_or_name}/collaborators` | `app` |
-| `team_app_collaborators_create` 🧪 | `POST /teams/apps/{id_or_name}/collaborators` | `app`, `user`, `permissions[]` |
+| `team_app_collaborators_create` 🧪 | `POST /teams/apps/{id_or_name}/collaborators` | `app`, `user`, `permissions?[]`, `silent?` |
 | `team_app_collaborators_update` 🧪 | `PATCH /teams/apps/{id_or_name}/collaborators/{email}` | `app`, `email`, `permissions[]` |
-| `team_app_collaborators_delete` ⚠ | `DELETE /teams/apps/{id_or_name}/collaborators/{email}` | `app`, `email`, `confirm: <email>` |
+| `team_app_collaborators_delete` ⚠🧪 | `DELETE /teams/apps/{id_or_name}/collaborators/{email}` | `app`, `email`, `confirm: <email>` |
 | `team_app_permissions_list` | `GET /teams/permissions` | — |
 | `team_invitations_list` 📄 | `GET /teams/{id_or_name}/invitations` | `team` |
 | `team_invitations_create` 🧪 | `PUT /teams/{id_or_name}/invitations` | `team`, `email`, `role` |
 | `team_invitations_accept` 🧪 | `POST /teams/invitations/{token}/accept` | `token` |
-| `team_invitations_revoke` ⚠ | `DELETE /teams/{id_or_name}/invitations/{user}` | `team`, `user`, `confirm: <email>` |
+| `team_invitations_revoke` ⚠🧪 | `DELETE /teams/{id_or_name}/invitations/{user}` | `team`, `user`, `confirm: <email>` |
 | `team_invoices_list` 📄 | `GET /teams/{id_or_name}/invoices` | `team` |
 | `team_invoices_info` | `GET /teams/{id_or_name}/invoices/{number}` | `team`, `number` |
 | `team_daily_usage` | `GET /teams/{id_or_name}/usage/daily` | `team`, `start`, `end` |
@@ -259,9 +269,12 @@ The per-tool expected `confirm` value is documented in the Params column where t
 | `team_features_update` 🧪 | `PATCH /teams/{id_or_name}/features/{id_or_name}` | `team`, `feature`, `enabled` |
 | `team_addons_list` 📄 | `GET /teams/{id_or_name}/addons` | `team` |
 | `team_preferences_get` | `GET /teams/{id_or_name}/preferences` | `team` |
-| `team_preferences_update` 🧪 | `PATCH /teams/{id_or_name}/preferences` | `team`, preference fields |
+| `team_preferences_update` 🧪 | `PATCH /teams/{id_or_name}/preferences` | `team`, `preferences: object` |
 | `team_spaces_list` 📄 | `GET /teams/{id_or_name}/spaces` | `team` |
 | `team_delinquency_info` | `GET /teams/{id_or_name}/delinquency` | `team` |
+| `allowed_addon_services_list` 📄 | `GET /teams/{id_or_name}/allowed-addon-services` | `team` |
+| `allowed_addon_services_create` 🧪 | `POST /teams/{id_or_name}/allowed-addon-services` | `team`, `addon_service` |
+| `allowed_addon_services_delete` ⚠🧪 | `DELETE /teams/{id_or_name}/allowed-addon-services/{id_or_name}` | `team`, `service`, `confirm: <name>` |
 
 ## Tier: `enterprise`
 
@@ -317,6 +330,8 @@ The per-tool expected `confirm` value is documented in the Params column where t
 
 ## Tier: `addons_consumer`
 
+> The `allowed_addon_services_*` tools formerly listed here ship with the `teams` tier in Phase 2b (they target `/teams/{id_or_name}/allowed-addon-services`). See the teams tier table.
+
 | Tool | Wraps | Params |
 |---|---|---|
 | `addon_services_list` 📄 | `GET /addon-services` | — |
@@ -338,9 +353,6 @@ The per-tool expected `confirm` value is documented in the Params column where t
 | `addon_attachments_info` | `GET /addon-attachments/{id}` | `attachment` |
 | `addon_attachments_create` 🧪 | `POST /addon-attachments` | `addon`, `app`, `name?`, `namespace?` |
 | `addon_attachments_delete` ⚠ | `DELETE /addon-attachments/{id}` | `attachment`, `confirm: <name>` |
-| `allowed_addon_services_list` 📄 | `GET /teams/{id_or_name}/allowed-addon-services` | `team` |
-| `allowed_addon_services_create` 🧪 | `POST /teams/{id_or_name}/allowed-addon-services` | `team`, `addon_service` |
-| `allowed_addon_services_delete` ⚠ | `DELETE /teams/{id_or_name}/allowed-addon-services/{id_or_name}` | `team`, `service`, `confirm: <name>` |
 | `addon_webhooks_list` 📄 | `GET /addons/{id_or_name}/webhooks` | `addon` |
 | `addon_webhooks_info` | `GET /addons/{id_or_name}/webhooks/{id}` | `addon`, `webhook` |
 | `addon_webhooks_create` 🧪 | `POST /addons/{id_or_name}/webhooks` | `addon`, `url`, `include`, `level`, `secret?` |

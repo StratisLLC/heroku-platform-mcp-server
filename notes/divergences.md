@@ -119,3 +119,102 @@ Phase 1 shipped 56 read-only tools. Phase 2a adds:
 Total Phase 2a writes: **47 new tools** across the apps tier.
 Apps-tier subtotal (reads + writes): 36 + 47 = **83 tools**.
 Total tools shipped to date: **103** (5 diagnostic + 15 account reads + 36 apps reads + 47 apps writes).
+
+---
+
+# Phase 2b divergences
+
+## 18. Phase 2b — `account_delete` is intentionally not implemented
+
+**Observation:** TOOLS.md previously listed `account_delete` (`DELETE /account`) with the `⚠🔒` markers. Phase 2b Decision 1 calls for omitting it. The endpoint requires the user's password as an HTTP header and irreversibly destroys the user's Heroku account; the user should perform this through the Heroku Dashboard. TOOLS.md is updated to document the omission rather than list the tool.
+
+**Doc impact:** None remaining — TOOLS.md now carries the one-line note next to the account tier table.
+
+## 19. Phase 2b — `oauth_tokens_create` deferred (still)
+
+**Observation:** Phase 1 deferred `oauth_tokens_create` because it was a POST (note 5 above). The Phase 2b handoff is explicit that this is not in scope: the endpoint is part of an OAuth-grant flow, primarily used by clients that perform user-facing OAuth, and the Partner MCP will pick it up in Phase 4. Listed in TOOLS.md but not implemented.
+
+## 20. Phase 2b — `account_features_list` is paginated; pagination ships with the read tool
+
+**Observation:** No change vs Phase 1 — flagged here only because the column was reformatted in TOOLS.md. The endpoint remains paginated and the read tool uses the shared pagination helper.
+
+## 21. Phase 2b — `keys_delete` confirm-target is a separate input field
+
+**Observation:** Decision 4 specifies "confirm: <key fingerprint>". The key is identified to Heroku via the URL path (which Heroku accepts as id or fingerprint), but the confirm value must be the fingerprint specifically. To preserve safety even when the caller addresses by id, the tool's input schema takes both `key` (the path argument — id or fingerprint) and `fingerprint` (the confirm target). The model must pass both and the values must agree for the call to be safe. Tests cover the case where the caller supplies a non-fingerprint `key`.
+
+## 22. Phase 2b — `oauth_authorizations_delete` confirm-target is a separate input field
+
+**Observation:** Decision 4 lists confirm as `<id or description>` — the model may identify the authorization by either. We expose a `confirm_target` input that holds the value the user actually used in conversation (either the id or the description). This is then both the expected `confirm` value AND the value shown in the dry-run description. The path still uses `id` (Heroku's only addressable form). Same pattern as note 21.
+
+## 23. Phase 2b — `team_invitations_revoke` pre-fetches via list-and-filter
+
+**Observation:** Per Decision 5, deletes without an individual GET pre-fetch by listing-and-filtering. The implementation calls `GET /teams/{id}/invitations`, finds the entry by matching `user.email` (case-insensitive) or `user.id` (or the entry id itself), and surfaces role + sent-at + sender (`invited_by.email`) in the dry-run description. When no match is found the description says so explicitly, and Heroku is expected to return 404 on the real call.
+
+## 24. Phase 2b — `allowed_addon_services_delete` pre-fetches via list-and-filter
+
+**Observation:** Same shape as note 23. `GET /teams/{id}/allowed-addon-services`, match by `addon_service.name`, `addon_service.id`, or the entry id, surface `added_by.email`.
+
+## 25. Phase 2b — `allowed_addon_services_*` ships with the teams tier (not addons_consumer)
+
+**Observation:** TOOLS.md originally listed these three tools under `addons_consumer`, but the endpoints they wrap (`POST/GET/DELETE /teams/{id}/allowed-addon-services`) are team-scoped and naturally gated by the teams probe. The capability matrix for `addons_consumer` is gated separately and is Phase 3 scope. We ship them with the teams tier (and gate them on `teams.list`); the addons_consumer table now carries a one-line note pointing to the teams tier for these tools.
+
+## 26. Phase 2b — `teams_create` and `teams_delete` carry deprecation context in their MCP descriptions
+
+**Observation:** Decision 2 calls for verbatim-or-close deprecation context in the tool descriptions: "the Heroku CLI removed its `teams:create` / `teams:destroy` commands because Heroku now recommends managing teams through an Enterprise account dashboard. The Platform API endpoints still work and create/destroy standalone (non-enterprise) teams." We embed this in the `description` field returned by `tools/list` so MCP hosts and the model both see it before invoking the tool. Unit tests assert that the substrings "CLI", "Enterprise", and "standalone" appear in the descriptions.
+
+## 27. Phase 2b — teams tier lights up on empty `200 []`
+
+**Observation:** Decision 7. We rely on the prober's existing `emptyOkCodes` handling — 204 / 404 already classify as "empty" in the prober; for `teams.list`, an empty array body returns 200 with `Content-Range: id 0..0; max=...; total=0`, which lands on the standard success path. The `tierAvailable` check therefore returns true regardless of team count. The unit test fixture covers both the "200 with one team" and "tier marked available with no teams in tiers" cases.
+
+## 28. Phase 2b — teams probe was already in place
+
+**Observation:** The `teams.list` probe was specified in CAPABILITY_PROBES.md and wired in `packages/core/src/probes.ts` in Phase 1. Phase 1 did not register any teams-tier tools, so the probe ran but had no effect on `tools/list`. Phase 2b populates the registration site (`packages/platform-mcp/src/tools/index.ts`) without modifying the probe definition.
+
+## 29. Phase 2b — apps_create and apps_filter remain Phase 1/2a, not Phase 2b
+
+**Observation:** The Phase 2b handoff explicitly notes that team-owned apps are deleted via the existing `apps_delete` tool from Phase 2a (it accepts any app id/name, team-owned or not). We did not duplicate `apps_delete` into a `team_apps_delete` and `team_apps_create` is implemented as a separate tool only because it has a different path (`POST /teams/apps`) and different parameters (`team` is required).
+
+## 30. Phase 2b — `team_apps_transfer` confirm-targets the app, not the recipient
+
+**Observation:** Decision 3 maps `team_apps_transfer` to `confirm: <app name>` — the app being transferred is the destructive target, not the new owner. The tool body builds a single PATCH with `{owner}` in the body (no extra `team_apps_update_locked` overlap). This intentionally splits the tool from `team_apps_update_locked` to give the model a clear semantic distinction: locking is reversible, ownership change is not.
+
+## 31. Phase 2b — `account_sms_number_recover` accepts an empty input schema
+
+**Observation:** The endpoint takes no inputs. To keep the `registerWriteTool` shape consistent (which always injects `dry_run` and the optional `confirm`), the tool declares `inputSchema: {}`. This is valid in zod and the SDK; the MCP `tools/list` payload reports the dry_run flag as the only optional input.
+
+## 32. Phase 2b — final tool count
+
+Phase 2b adds:
+
+  Account writes (11):  account_update, account_features_update, account_sms_number_recover,
+                        keys_create, keys_delete, oauth_authorizations_create,
+                        oauth_authorizations_delete, oauth_authorizations_regenerate,
+                        invoice_address_update, credits_create, user_preferences_update
+  Teams reads (20):     teams_list, teams_info, team_members_list, team_members_apps_list,
+                        team_apps_list, team_apps_info, team_app_collaborators_list,
+                        team_app_permissions_list, team_invitations_list, team_invoices_list,
+                        team_invoices_info, team_daily_usage, team_monthly_usage,
+                        team_features_list, team_features_info, team_addons_list,
+                        allowed_addon_services_list, team_preferences_get, team_spaces_list,
+                        team_delinquency_info
+  Teams writes (18):    teams_create, teams_update, teams_delete,
+                        team_members_create_or_update, team_members_delete,
+                        team_apps_create, team_apps_update_locked, team_apps_transfer,
+                        team_app_collaborators_create, team_app_collaborators_update,
+                        team_app_collaborators_delete,
+                        team_invitations_create, team_invitations_accept, team_invitations_revoke,
+                        team_features_update, team_preferences_update,
+                        allowed_addon_services_create, allowed_addon_services_delete
+
+Total Phase 2b: **49 new tools** (11 account writes + 20 teams reads + 18 teams writes).
+Total tools shipped to date: **152** (103 from Phase 1 + 2a, plus 49 Phase 2b).
+
+## 33. Phase 2b fix — confirm pattern uses canonical name from prefetched resource, not input arg
+
+**Observation:** Original Phase 2a / 2b design: `confirm` matched whatever was passed as `args.<id-field>`. Bug surfaced in the Phase 2b Claude Desktop acceptance test: when Claude resolves a resource to its UUID internally and passes the UUID as input, the confirm guard then demanded the UUID as `confirm` — but the user typed the human-readable name in conversation. That defeats the purpose of the gate, which is supposed to capture "the user explicitly typed this canonical identifier."
+
+**Fix:** Extract the expected confirm value from the prefetched response's canonical identifier field (`resource.name` for apps/teams/dynos/pipelines/sni endpoints, `resource.user.email` for collaborators/invitations, `resource.email` for team members, `resource.fingerprint` for SSH keys, `resource.hostname` for domains, `resource.id` for telemetry drains and review apps which lack human names, `resource.description ?? resource.id` for oauth authorizations). The destructive spec in `packages/platform-mcp/src/write-tool.ts` now takes `expectedFromResource(resource) => string | undefined` (preferred) and `expectedFromArgs(args) => string` (fallback). The pre-fetch now also runs on the real-call path (not just dry-run) so the gate has a canonical resource to derive from. For tools whose pre-fetch is list-and-filter (`team_invitations_revoke`, `allowed_addon_services_delete`), `expectedFromArgs` is the safe fallback when the entry is no longer present.
+
+Tools that previously had no pre-fetch but needed one for this fix gained one: `apps_disable_acm`, `dynos_restart`, `dynos_restart_all`, `dynos_stop`, `releases_rollback`, `builds_delete_cache`, `log_drains_delete` (switched from drain-prefetch to app-prefetch since confirm is on the app name), `app_webhooks_delete` (same switch), `app_transfers_update`, `team_apps_transfer`, `review_apps_config_delete`, `oauth_authorizations_regenerate`.
+
+**Doc impact:** PHASE-2a.md (Decision 1) and PHASE-2b.md (Decisions 3 & 4) carry post-fix notes pointing to this entry.

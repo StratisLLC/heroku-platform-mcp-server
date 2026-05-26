@@ -134,7 +134,13 @@ export function registerReviewAppsWriteTools(server: McpServer, ctx: ToolContext
     description:
       'Delete a review app. Wraps DELETE /review-apps/{id}. Destructive: pass confirm matching the review app id.',
     inputSchema: reviewAppsDeleteShape,
-    destructive: { targetKind: 'review_app', expectedFrom: (args) => args.review_app },
+    destructive: {
+      targetKind: 'review_app',
+      // Review apps don't have a human-readable name; the UUID is canonical.
+      expectedFromResource: (resource) =>
+        typeof resource?.id === 'string' ? resource.id : undefined,
+      expectedFromArgs: (args) => args.review_app,
+    },
     preFetch: {
       run: (args) =>
         ctx.client.get<HerokuRecord>(`/review-apps/${url(args.review_app)}`, {
@@ -201,13 +207,25 @@ export function registerReviewAppsWriteTools(server: McpServer, ctx: ToolContext
     description:
       'Disable review apps on a pipeline. Wraps DELETE /pipelines/{id_or_name}/review-app-config. Destructive: pass confirm matching the pipeline name.',
     inputSchema: reviewAppsConfigDeleteShape,
-    destructive: { targetKind: 'pipeline', expectedFrom: (args) => args.pipeline },
+    destructive: {
+      targetKind: 'pipeline',
+      expectedFromResource: pickPipelineName,
+      expectedFromArgs: (args) => args.pipeline,
+    },
+    preFetch: {
+      run: (args) =>
+        ctx.client.get<HerokuRecord>(`/pipelines/${url(args.pipeline)}`, {
+          tool: 'review_apps_config_delete',
+        }),
+    },
     build: (args) => ({
       method: 'DELETE',
       path: `/pipelines/${url(args.pipeline)}/review-app-config`,
     }),
-    describe: (args) =>
-      `Would disable review apps on pipeline '${args.pipeline}'. Existing review apps remain until manually deleted.`,
+    describe: (args, fetched) => {
+      const name = pickPipelineName(fetched) ?? args.pipeline;
+      return `Would disable review apps on pipeline '${name}'. Existing review apps remain until manually deleted.`;
+    },
   });
 
   registerWriteTool<typeof appSetupsCreateShape, HerokuRecord>(server, ctx, {
@@ -226,4 +244,11 @@ export function registerReviewAppsWriteTools(server: McpServer, ctx: ToolContext
         args.app?.name ? ` (app name '${args.app.name}')` : ''
       }.`,
   });
+}
+
+/** Pick a pipeline's canonical name from a `/pipelines/{id_or_name}`
+ *  response. */
+function pickPipelineName(record: HerokuRecord | undefined): string | undefined {
+  if (!record) return undefined;
+  return typeof record.name === 'string' ? record.name : undefined;
 }

@@ -115,20 +115,26 @@ export function registerWebhooksWriteTools(server: McpServer, ctx: ToolContext):
     description:
       'Delete an app webhook. Wraps DELETE /apps/{id_or_name}/webhooks/{id}. Destructive: pass confirm matching the app name.',
     inputSchema: webhooksDeleteShape,
-    destructive: { targetKind: 'webhook', expectedFrom: (args) => args.app },
+    destructive: {
+      targetKind: 'webhook',
+      // app_webhooks_delete confirms on the *app* name (per Phase 2a Decision),
+      // so we fetch the parent app instead of the webhook itself.
+      expectedFromResource: (resource) =>
+        typeof resource?.name === 'string' ? resource.name : undefined,
+      expectedFromArgs: (args) => args.app,
+    },
     preFetch: {
       run: (args) =>
-        ctx.client.get<HerokuRecord>(`/apps/${url(args.app)}/webhooks/${url(args.webhook)}`, {
-          tool: 'app_webhooks_delete',
-        }),
+        ctx.client.get<HerokuRecord>(`/apps/${url(args.app)}`, { tool: 'app_webhooks_delete' }),
     },
     build: (args) => ({
       method: 'DELETE',
       path: `/apps/${url(args.app)}/webhooks/${url(args.webhook)}`,
     }),
     describe: (args, fetched) => {
-      const target = typeof fetched?.url === 'string' ? fetched.url : args.webhook;
-      return `Would remove app webhook '${args.webhook}' from '${args.app}' (delivered to ${target}). Event delivery stops immediately.`;
+      // `fetched` is now the parent app (so we can derive the confirm name).
+      const appName = typeof fetched?.name === 'string' ? fetched.name : args.app;
+      return `Would remove app webhook '${args.webhook}' from '${appName}'. Event delivery stops immediately.`;
     },
   });
 }

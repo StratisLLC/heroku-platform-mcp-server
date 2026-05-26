@@ -73,20 +73,33 @@ describe('formation-tier writes', () => {
     });
   });
 
-  it('dynos_restart requires confirm matching app name', async () => {
-    const { client, calls } = await spinUpServer({ capabilities: appsOnly, responses: [] });
+  it('dynos_restart requires confirm matching the prefetched app name', async () => {
+    const { client, calls } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        {
+          match: (url) => url === 'https://api.heroku.com/apps/demo',
+          body: { id: 'a-1', name: 'demo' },
+        },
+      ],
+    });
     const result = (await client.callTool({
       name: 'dynos_restart',
       arguments: { app: 'demo', dyno: 'web.1', confirm: 'web.1' /* wrong target */ },
     })) as { content: unknown[]; isError?: boolean };
     expect(result.isError).toBe(true);
-    expect(calls).toHaveLength(0);
+    expect(calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
   });
 
-  it('dynos_stop requires confirm matching dyno name (not the app)', async () => {
+  it('dynos_stop requires confirm matching the prefetched dyno name (not the app)', async () => {
     const { client } = await spinUpServer({
       capabilities: appsOnly,
       responses: [
+        {
+          match: (url, init) =>
+            url === 'https://api.heroku.com/apps/demo/dynos/run.1234' && init?.method === 'GET',
+          body: { id: 'd-1', name: 'run.1234' },
+        },
         {
           match: (url, init) =>
             url === 'https://api.heroku.com/apps/demo/dynos/run.1234/actions/stop' &&
@@ -102,7 +115,7 @@ describe('formation-tier writes', () => {
     })) as { isError?: boolean };
     expect(reject.isError).toBe(true);
 
-    // Correct confirm — dyno name.
+    // Correct confirm — dyno name (from prefetch).
     const ok = (await client.callTool({
       name: 'dynos_stop',
       arguments: { app: 'demo', dyno: 'run.1234', confirm: 'run.1234' },
@@ -116,6 +129,11 @@ describe('formation-tier writes', () => {
       responses: [
         {
           match: (url, init) =>
+            url === 'https://api.heroku.com/apps/demo' && init?.method === 'GET',
+          body: { id: 'a-1', name: 'demo' },
+        },
+        {
+          match: (url, init) =>
             url === 'https://api.heroku.com/apps/demo/dynos' && init?.method === 'DELETE',
           body: {},
         },
@@ -126,6 +144,6 @@ describe('formation-tier writes', () => {
       arguments: { app: 'demo', confirm: 'demo' },
     })) as { content: unknown[] };
     expect(parseEnvelope(result).ok).toBe(true);
-    expect(calls[0]?.method).toBe('DELETE');
+    expect(calls.find((c) => c.method === 'DELETE')).toBeDefined();
   });
 });

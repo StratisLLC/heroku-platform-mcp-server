@@ -76,14 +76,47 @@ describe('review apps + setups writes', () => {
     expect(calls).toHaveLength(1);
   });
 
-  it('review_apps_config_delete requires confirm matching the pipeline name', async () => {
-    const { client, calls } = await spinUpServer({ capabilities: appsOnly, responses: [] });
+  it('review_apps_config_delete requires confirm matching the prefetched pipeline name', async () => {
+    const { client, calls } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        {
+          match: (url) => url === 'https://api.heroku.com/pipelines/pl-1',
+          body: { id: 'pl-1', name: 'my-pipeline' },
+        },
+      ],
+    });
     const result = (await client.callTool({
       name: 'review_apps_config_delete',
-      arguments: { pipeline: 'pl-1', confirm: 'wrong' },
+      arguments: { pipeline: 'pl-1', confirm: 'pl-1' },
     })) as { isError?: boolean };
     expect(result.isError).toBe(true);
-    expect(calls).toHaveLength(0);
+    expect(calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
+  });
+
+  it('review_apps_config_delete accepts confirm matching the pipeline canonical name', async () => {
+    const { client, calls } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        {
+          match: (url, init) =>
+            url === 'https://api.heroku.com/pipelines/pl-1' && init?.method === 'GET',
+          body: { id: 'pl-1', name: 'my-pipeline' },
+        },
+        {
+          match: (url, init) =>
+            url === 'https://api.heroku.com/pipelines/pl-1/review-app-config' &&
+            init?.method === 'DELETE',
+          body: {},
+        },
+      ],
+    });
+    const result = (await client.callTool({
+      name: 'review_apps_config_delete',
+      arguments: { pipeline: 'pl-1', confirm: 'my-pipeline' },
+    })) as { content: unknown[] };
+    expect(parseEnvelope(result).ok).toBe(true);
+    expect(calls.filter((c) => c.method === 'DELETE')).toHaveLength(1);
   });
 
   it('app_setups_create POSTs to /app-setups with source_blob', async () => {
