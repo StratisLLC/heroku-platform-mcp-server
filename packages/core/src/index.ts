@@ -18,3 +18,5 @@ export * from './client.js';
 export * from './schema.js';
 export * from './probes.js';
 export * from './prober.js';
+export * from './confirm.js';
+export * from './dry-run.js';

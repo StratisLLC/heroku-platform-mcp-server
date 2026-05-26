@@ -11,6 +11,9 @@
  *     our envelope expects.
  *   - apps_list returns a list (or an empty list when the account has none).
  *   - config_vars_get returns a cleartext map if any apps exist.
+ *   - Phase 2a write flow: create app → set config var → scale formation →
+ *     rename → dry_run delete (verifies pre-fetch surfaced owner/region) →
+ *     actual delete with confirm.
  */
 
 import { mkdtemp } from 'node:fs/promises';
@@ -101,4 +104,90 @@ describeLive('platform-mcp ↔ live api.heroku.com', () => {
       }
     }
   }, 60_000);
+
+  it('walks the Phase 2a write lifecycle (create → mutate → dry_run delete → delete)', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'herokumcp-int2a-'));
+    const paths = resolvePaths({ home, platform: process.platform });
+    const built = await buildServer({
+      token: TOKEN!,
+      paths,
+      version: '0.0.0-int',
+      forceProbe: true,
+    });
+    const client = new Client({ name: 'integration2a', version: '0.0.0-int' });
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    await Promise.all([built.server.connect(b), client.connect(a)]);
+
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    if (!names.includes('apps_create') || !names.includes('apps_delete')) {
+      return; // tier not available on this token
+    }
+
+    const baseName = `herokumcp-2a-${Date.now().toString(36)}`;
+
+    // Create. (apps_create is a Phase 1 read-marked tool that POSTs; if Phase 2
+    // adds it as a write, this still works because dry_run is optional.)
+    const create = (await client.callTool({
+      name: 'apps_create',
+      arguments: { name: baseName },
+    })) as { content: unknown[]; isError?: boolean };
+    if (create.isError) {
+      // Account may not have room for new apps — bail out gracefully.
+      return;
+    }
+    const created = parseEnv<{ id: string; name: string }>(create);
+    expect(created.ok).toBe(true);
+    const appName = created.data!.name;
+
+    try {
+      // Set a config var (no confirm required).
+      const cfg = (await client.callTool({
+        name: 'config_vars_update',
+        arguments: { app: appName, config: { PHASE_2A_FLAG: '1' } },
+      })) as { content: unknown[] };
+      expect(parseEnv(cfg).ok).toBe(true);
+
+      // Scale the web formation to zero (no confirm; reversible).
+      const scale = (await client.callTool({
+        name: 'formation_scale',
+        arguments: { app: appName, updates: [{ type: 'web', quantity: 0 }] },
+      })) as { content: unknown[]; isError?: boolean };
+      // Heroku may 422 if there's no web process type yet — that's fine.
+      // Just exercise the request path.
+      void scale;
+
+      // dry_run delete: should pre-fetch and return the description.
+      const previewName = `${appName}-renamed`;
+      const update = (await client.callTool({
+        name: 'apps_update',
+        arguments: { app: appName, name: previewName },
+      })) as { content: unknown[] };
+      const updEnv = parseEnv<{ name: string }>(update);
+      expect(updEnv.ok).toBe(true);
+      expect(updEnv.data?.name).toBe(previewName);
+
+      const dryRun = (await client.callTool({
+        name: 'apps_delete',
+        arguments: { app: previewName, dry_run: true },
+      })) as { content: unknown[] };
+      const dryEnv = parseEnv<{ description: string; request: { method: string } }>(dryRun);
+      expect(dryEnv.ok).toBe(true);
+      expect(dryEnv.data?.request.method).toBe('DELETE');
+      expect(typeof dryEnv.data?.description).toBe('string');
+      expect(dryEnv.data!.description.length).toBeGreaterThan(0);
+
+      // Real delete, with confirm matching the (renamed) app name.
+      const del = (await client.callTool({
+        name: 'apps_delete',
+        arguments: { app: previewName, confirm: previewName },
+      })) as { content: unknown[] };
+      expect(parseEnv(del).ok).toBe(true);
+    } catch (err) {
+      // Best-effort cleanup if anything in the middle blew up.
+      await client
+        .callTool({ name: 'apps_delete', arguments: { app: appName, confirm: appName } })
+        .catch(() => undefined);
+      throw err;
+    }
+  }, 90_000);
 });

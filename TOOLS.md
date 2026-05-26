@@ -11,6 +11,21 @@
 
 All tools also accept a hidden `_meta` parameter for host telemetry passthrough (ignored by the server logic).
 
+## Phase 2a notes — `dry_run` and `confirm` patterns
+
+Every mutating tool accepts `dry_run: boolean` (default `false`). When `dry_run: true`:
+
+- Inputs are validated and the would-be HTTP request is built.
+- For **DELETE** operations, the resource's current state is fetched via the matching GET endpoint and surfaced in the response's `description` field (owner, region, stack, created-at for apps; service/plan/attachment for add-ons; hostname/CNAME for domains; etc.). If the pre-fetch fails (404/403), the dry-run returns that error rather than simulating a fake request.
+- The response shape is `{ ok: true, data: { request: { method, url, headers, body }, description }, meta: {...} }`. The `Authorization` header is stripped from the preview's `headers` map.
+- No request is issued to Heroku.
+
+Destructive tools (⚠) additionally require `confirm: string`. The model must NOT auto-fill `confirm` from the same user turn that requested the destructive op — the verbal confirmation in chat is the audit trail. When `confirm` is missing or mismatched (case-sensitive), the tool returns a structured `confirmation_required` envelope (`{ ok: false, error: { kind: 'confirmation', details: { kind: 'confirmation_required', expected, target_kind, reason } } }`) without making the API call.
+
+When both `dry_run: true` and `confirm` are passed, the dry-run wins — no real request is issued, and the `confirm` value is not validated.
+
+The per-tool expected `confirm` value is documented in the Params column where the ⚠ marker appears.
+
 ---
 
 # `heroku-platform-mcp` (Customer)
@@ -103,7 +118,7 @@ All tools also accept a hidden `_meta` parameter for host telemetry passthrough 
 | `dyno_sizes_list` | `GET /dyno-sizes` | — |
 | `dynos_list` 📄 | `GET /apps/{id_or_name}/dynos` | `app` |
 | `dynos_info` | `GET /apps/{id_or_name}/dynos/{id_or_name}` | `app`, `dyno` |
-| `dynos_run` 🧪 | `POST /apps/{id_or_name}/dynos` | `app`, `command`, `attach?`, `env?`, `size?`, `type?`, `time_to_live?` |
+| `dynos_run` 🧪 | `POST /apps/{id_or_name}/dynos` | `app`, `command`, `attach?`, `env?`, `size?`, `type?`, `time_to_live?` — returns dyno metadata only; rendezvous output streaming is deferred to Phase 4 (HTTP transport). |
 | `dynos_restart` ⚠ | `DELETE /apps/{id_or_name}/dynos/{id_or_name}` | `app`, `dyno`, `confirm: <app>` |
 | `dynos_restart_all` ⚠ | `DELETE /apps/{id_or_name}/dynos` | `app`, `confirm: <app>` |
 | `dynos_stop` ⚠ | `POST /apps/{id_or_name}/dynos/{id_or_name}/actions/stop` | `app`, `dyno`, `confirm: <dyno>` |
@@ -163,7 +178,7 @@ All tools also accept a hidden `_meta` parameter for host telemetry passthrough 
 | `telemetry_drains_update` 🧪 | `PATCH /telemetry-drains/{id}` | drain params |
 | `telemetry_drains_delete` ⚠ | `DELETE /telemetry-drains/{id}` | `id`, `confirm: <id>` |
 
-> `telemetry_drains_list` is account-scoped — it returns every telemetry drain the token can see across all apps, not the drains for one app. There is no per-app variant in the Heroku Platform API.
+> `telemetry_drains_list`, `telemetry_drains_update`, and `telemetry_drains_delete` are account-scoped — addressed by the drain id rather than by app. Only `telemetry_drains_create` is per-app (`POST /apps/{app}/telemetry-drains`); updates and deletes use the global `/telemetry-drains/{id}` path.
 
 ### Webhooks
 

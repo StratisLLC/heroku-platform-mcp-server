@@ -13,7 +13,16 @@ import { isDiagnosticOnly, tierAvailable } from '../capabilities.js';
 import type { ToolContext } from '../context.js';
 import { registerAccountTools } from './account.js';
 import { registerAppsTools } from './apps.js';
+import { registerAppsWriteTools } from './apps-writes.js';
+import { registerCollabWriteTools } from './collab-writes.js';
+import { registerConfigWriteTools } from './config-writes.js';
 import { registerDiagnosticTools } from './diagnostics.js';
+import { registerDomainsWriteTools } from './domains-writes.js';
+import { registerFormationWriteTools } from './formation-writes.js';
+import { registerLogsWriteTools } from './logs-writes.js';
+import { registerReleasesWriteTools } from './releases-writes.js';
+import { registerReviewAppsWriteTools } from './review-apps-writes.js';
+import { registerWebhooksWriteTools } from './webhooks-writes.js';
 
 /** Register every tool the current capability matrix authorises. */
 export function registerAllTools(server: McpServer, ctx: ToolContext): RegistrationSummary {
@@ -25,6 +34,7 @@ export function registerAllTools(server: McpServer, ctx: ToolContext): Registrat
     diagnostic: true,
     account: false,
     apps: false,
+    appsWrites: false,
     diagnosticOnly: isDiagnosticOnly(capabilities),
   };
 
@@ -38,7 +48,20 @@ export function registerAllTools(server: McpServer, ctx: ToolContext): Registrat
   }
   if (tierAvailable(capabilities, 'apps')) {
     registerAppsTools(server, ctx);
+    // Phase 2a — apps-tier writes. Same tier gate as reads; an apps-readable
+    // token may still 403 on a specific write, but that's surfaced as a normal
+    // ForbiddenError envelope on the failing call.
+    registerAppsWriteTools(server, ctx);
+    registerConfigWriteTools(server, ctx);
+    registerFormationWriteTools(server, ctx);
+    registerReleasesWriteTools(server, ctx);
+    registerDomainsWriteTools(server, ctx);
+    registerLogsWriteTools(server, ctx);
+    registerWebhooksWriteTools(server, ctx);
+    registerCollabWriteTools(server, ctx);
+    registerReviewAppsWriteTools(server, ctx);
     summary.apps = true;
+    summary.appsWrites = true;
   }
   return summary;
 }
@@ -47,6 +70,8 @@ export interface RegistrationSummary {
   diagnostic: boolean;
   account: boolean;
   apps: boolean;
+  /** True iff Phase 2a apps-tier write tools were registered. */
+  appsWrites: boolean;
   /** True iff the account tier reported delinquent or suspended — only
    *  diagnostic tools were registered. */
   diagnosticOnly: boolean;
