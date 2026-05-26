@@ -77,7 +77,7 @@ export class AuditLogger {
   append(entry: AuditEntry): Promise<void> {
     const now = this.clock();
     const ts = entry.ts ?? now.toISOString();
-    const filename = audutFileName(now);
+    const filename = auditFileName(now);
     const filePath = join(this.dir, filename);
 
     const merged: AuditEntry = { ...entry, ts };
@@ -102,7 +102,7 @@ export class AuditLogger {
    * tailing, callers should read directly from disk.
    */
   async tail(limit = 50): Promise<AuditEntry[]> {
-    const filename = audutFileName(this.clock());
+    const filename = auditFileName(this.clock());
     const filePath = join(this.dir, filename);
     let text: string;
     try {
@@ -154,7 +154,7 @@ export class AuditLogger {
 
 /** Build the audit filename for a given date (UTC). Exposed for tests and
  *  host glob patterns. */
-export function audutFileName(now: Date): string {
+export function auditFileName(now: Date): string {
   const ymd = now.toISOString().slice(0, 10);
   return `${AUDIT_FILE_PREFIX}${ymd}${AUDIT_FILE_SUFFIX}`;
 }

@@ -2,7 +2,7 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AuditLogger, audutFileName } from '../src/audit.js';
+import { AuditLogger, auditFileName } from '../src/audit.js';
 import { HEROKU_ALLOWED_HOSTS, createClient, type ClientConfig } from '../src/client.js';
 import {
   AuthError,
@@ -388,7 +388,7 @@ describe('createClient — audit', () => {
     const client = createClient(baseConfig({ fetch, audit, tokenFingerprint: 'fp1234567890abcd' }));
     await client.delete('/apps/x', { tool: 'apps_delete', target: 'x' });
 
-    const filename = audutFileName(new Date());
+    const filename = auditFileName(new Date());
     const contents = await readFile(join(dir, filename), { encoding: 'utf8' });
     const line = JSON.parse(contents.trim().split('\n')[0]!);
     expect(line.tool).toBe('apps_delete');
@@ -409,7 +409,7 @@ describe('createClient — audit', () => {
       NotFoundError,
     );
 
-    const filename = audutFileName(new Date());
+    const filename = auditFileName(new Date());
     const contents = await readFile(join(dir, filename), { encoding: 'utf8' });
     const line = JSON.parse(contents.trim().split('\n')[0]!);
     expect(line.status).toBe(404);
@@ -421,7 +421,7 @@ describe('createClient — audit', () => {
     const client = createClient(baseConfig({ fetch, audit }));
     await client.get('/account');
 
-    const filename = audutFileName(new Date());
+    const filename = auditFileName(new Date());
     let text = '';
     try {
       text = await readFile(join(dir, filename), { encoding: 'utf8' });

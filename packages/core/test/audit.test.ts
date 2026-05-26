@@ -2,7 +2,7 @@ import { mkdtemp, readFile, readdir, writeFile, utimes } from 'node:fs/promises'
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { AUDIT_FILE_PREFIX, AUDIT_FILE_SUFFIX, AuditLogger, audutFileName } from '../src/audit.js';
+import { AUDIT_FILE_PREFIX, AUDIT_FILE_SUFFIX, AuditLogger, auditFileName } from '../src/audit.js';
 import type { AuditEntry } from '../src/audit.js';
 
 let dir: string;
@@ -27,10 +27,10 @@ const baseEntry: AuditEntry = {
   durationMs: 412,
 };
 
-describe('audutFileName', () => {
+describe('auditFileName', () => {
   it('formats as audit-YYYY-MM-DD.log in UTC', () => {
     const d = new Date('2026-05-22T23:59:59.000Z');
-    expect(audutFileName(d)).toBe('audit-2026-05-22.log');
+    expect(auditFileName(d)).toBe('audit-2026-05-22.log');
   });
 });
 
@@ -40,7 +40,7 @@ describe('AuditLogger.append', () => {
     const log = new AuditLogger({ dir, now: () => fixedNow });
     await log.append(baseEntry);
 
-    const filename = audutFileName(fixedNow);
+    const filename = auditFileName(fixedNow);
     const contents = await readFile(join(dir, filename), { encoding: 'utf8' });
     const lines = contents.split('\n').filter(Boolean);
     expect(lines).toHaveLength(1);
@@ -55,7 +55,7 @@ describe('AuditLogger.append', () => {
     const sub = join(dir, 'nested', 'audit');
     const log = new AuditLogger({ dir: sub });
     await log.append(baseEntry);
-    const filename = audutFileName(new Date());
+    const filename = auditFileName(new Date());
     const contents = await readFile(join(sub, filename), { encoding: 'utf8' });
     expect(contents).toContain('apps_delete');
   });
@@ -66,7 +66,7 @@ describe('AuditLogger.append', () => {
     await log.append({ ...baseEntry, tool: 'config_vars_update', method: 'PATCH' });
     await log.append({ ...baseEntry, tool: 'dynos_restart_all', method: 'DELETE' });
 
-    const filename = audutFileName(new Date());
+    const filename = auditFileName(new Date());
     const contents = await readFile(join(dir, filename), { encoding: 'utf8' });
     const lines = contents.split('\n').filter(Boolean);
     expect(lines).toHaveLength(3);
@@ -81,7 +81,7 @@ describe('AuditLogger.append', () => {
       ...baseEntry,
       url: 'https://api.heroku.com/apps/x?token=HRKU-abcdef-1234',
     });
-    const filename = audutFileName(new Date());
+    const filename = auditFileName(new Date());
     const contents = await readFile(join(dir, filename), { encoding: 'utf8' });
     expect(contents).toContain('[REDACTED]');
     expect(contents).not.toContain('HRKU-abcdef-1234');
@@ -94,7 +94,7 @@ describe('AuditLogger.append', () => {
         log.append({ ...baseEntry, tool: `tool_${i}`, durationMs: i }),
       ),
     );
-    const filename = audutFileName(new Date());
+    const filename = auditFileName(new Date());
     const contents = await readFile(join(dir, filename), { encoding: 'utf8' });
     const lines = contents.split('\n').filter(Boolean);
     expect(lines).toHaveLength(25);
@@ -139,7 +139,7 @@ describe('AuditLogger.tail', () => {
   });
 
   it('skips malformed lines but still returns the good ones', async () => {
-    const filename = audutFileName(new Date());
+    const filename = auditFileName(new Date());
     await writeFile(
       join(dir, filename),
       [
@@ -164,7 +164,7 @@ describe('AuditLogger.cleanupExpired', () => {
 
     // File from today (within retention).
     await log.append(baseEntry);
-    const todayFile = join(dir, audutFileName(realNow));
+    const todayFile = join(dir, auditFileName(realNow));
 
     // File from 30 days ago (well outside retention).
     const ancient = join(dir, 'audit-old.log');
@@ -176,7 +176,7 @@ describe('AuditLogger.cleanupExpired', () => {
     expect(removed).toBe(1);
 
     const remaining = await readdir(dir);
-    expect(remaining).toContain(audutFileName(realNow));
+    expect(remaining).toContain(auditFileName(realNow));
     expect(remaining).not.toContain('audit-old.log');
 
     const text = await readFile(todayFile, { encoding: 'utf8' });

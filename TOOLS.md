@@ -71,6 +71,8 @@ All tools also accept a hidden `_meta` parameter for host telemetry passthrough 
 | `apps_update` 🧪🏷 | `PATCH /apps/{id_or_name}` | `app`, `name?`, `maintenance?`, `build_stack?` |
 | `apps_delete` ⚠ | `DELETE /apps/{id_or_name}` | `app`, `confirm: <name>` |
 | `apps_filter` 📄 | `POST /filters/apps` | `in: { id: string[] }` |
+
+> `apps_filter` is semantically a read (no state change) but wraps `POST` because the filter criteria — an arbitrary list of app IDs — would not fit in a URL. Treated as a list tool for tier/diagnostic gating.
 | `apps_enable_acm` 🧪 | `POST /apps/{id_or_name}/acm` | `app` |
 | `apps_disable_acm` ⚠ | `DELETE /apps/{id_or_name}/acm` | `app`, `confirm: <name>` |
 | `apps_refresh_acm` 🧪 | `PATCH /apps/{id_or_name}/acm` | `app` |
@@ -156,10 +158,12 @@ All tools also accept a hidden `_meta` parameter for host telemetry passthrough 
 | `log_drains_info` | `GET /apps/{id_or_name}/log-drains/{id_or_url_or_token}` | `app`, `drain` |
 | `log_drains_create` 🧪 | `POST /apps/{id_or_name}/log-drains` | `app`, `url` |
 | `log_drains_delete` ⚠ | `DELETE /apps/{id_or_name}/log-drains/{id_or_url_or_token}` | `app`, `drain`, `confirm: <app>` |
-| `telemetry_drains_list` 📄 | `GET /telemetry-drains` | — |
+| `telemetry_drains_list` 📄 | `GET /telemetry-drains` | — (account-scoped) |
 | `telemetry_drains_create` 🧪 | `POST /apps/{id_or_name}/telemetry-drains` | `app`, drain params |
 | `telemetry_drains_update` 🧪 | `PATCH /telemetry-drains/{id}` | drain params |
 | `telemetry_drains_delete` ⚠ | `DELETE /telemetry-drains/{id}` | `id`, `confirm: <id>` |
+
+> `telemetry_drains_list` is account-scoped — it returns every telemetry drain the token can see across all apps, not the drains for one app. There is no per-app variant in the Heroku Platform API.
 
 ### Webhooks
 

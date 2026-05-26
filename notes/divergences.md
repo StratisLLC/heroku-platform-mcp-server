@@ -38,9 +38,9 @@ A running log of decisions where the implementation departs from (or extends) th
 
 **Observation:** `test/integration/platform.integration.test.ts` is the documented Phase 1 smoke test. It is skipped without the env var, matching the pattern set by `packages/core/test/integration/`. The unit tests in `test/tools/*.test.ts` cover the same code paths against a mocked client.
 
-## 8. `audutFileName` typo preserved
+## 8. `audutFileName` typo — fixed
 
-**Observation:** Phase 0 shipped `auditLogger.append()` using a helper named `audutFileName` (note the missing 'i'). Renaming it is a one-line fix and a tiny test update, but it touches packages/core's API surface. Phase 1 does not consume the helper directly; flagged here so Phase 2 (which writes audit entries) can revisit. Not a divergence from the docs — neither ARCHITECTURE.md nor TOOLS.md names this helper — but a real typo worth fixing.
+**Observation:** Phase 0 originally shipped the helper as `audutFileName` (missing 'i'). Renamed to `auditFileName` ahead of Phase 2; src and tests updated together. No external consumers exist outside this repo, so the rename is safe.
 
 ## 9. Capability cache layout
 
