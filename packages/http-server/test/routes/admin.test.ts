@@ -105,6 +105,7 @@ describe('/admin/tokens/:id/revoke', () => {
       {
         userId,
         connectionTokenId: tokenId,
+        oauthClientId: null,
 
         built: { server: { close: vi.fn(async () => undefined) } } as any,
 

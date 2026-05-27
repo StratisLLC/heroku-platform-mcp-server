@@ -97,6 +97,7 @@ describe('/me/sign-out-everywhere', () => {
       {
         userId,
         connectionTokenId: 'tok',
+        oauthClientId: null,
 
         built: { server: { close: vi.fn(async () => undefined) } } as any,
 

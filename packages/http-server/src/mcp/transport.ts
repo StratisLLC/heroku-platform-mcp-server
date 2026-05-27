@@ -16,8 +16,12 @@ export interface SessionEntry {
   id: string;
   /** The user's primary key. Set at session creation. */
   userId: string;
-  /** Connection-token id used to create this session. */
-  connectionTokenId: string;
+  /** Connection-token id used to create this session (Phase 4 bearer path).
+   *  Null for OAuth-issued sessions. */
+  connectionTokenId: string | null;
+  /** OAuth client id used to create this session (Phase 4.5 OAuth path).
+   *  Null for bearer-token sessions. */
+  oauthClientId: string | null;
   /** The MCP server + its context. */
   built: BuiltServer;
   /** The transport hosting the session. */
@@ -85,6 +89,19 @@ export class TransportManager {
     let n = 0;
     for (const [id, entry] of this.sessions) {
       if (entry.connectionTokenId === tokenId) {
+        this.sessions.delete(id);
+        void entry.built.server.close().catch(() => undefined);
+        n += 1;
+      }
+    }
+    return n;
+  }
+
+  /** Revoke every session that was authorised by the given OAuth client. */
+  evictByOauthClient(clientId: string): number {
+    let n = 0;
+    for (const [id, entry] of this.sessions) {
+      if (entry.oauthClientId === clientId) {
         this.sessions.delete(id);
         void entry.built.server.close().catch(() => undefined);
         n += 1;

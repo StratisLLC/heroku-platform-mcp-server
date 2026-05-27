@@ -91,7 +91,7 @@ export function buildMeRoutes(deps: MeRoutesDeps): Hono<AppEnv> {
     }
     const revokedCount = await revokeAllTokensForClient(deps.pool, id);
     await revokeOAuthClient(deps.pool, id);
-    deps.transports.evictByUser(auth.user.id);
+    deps.transports.evictByOauthClient(id);
     await appendAuditEntry(deps.pool, {
       userId: auth.user.id,
       category: 'auth',

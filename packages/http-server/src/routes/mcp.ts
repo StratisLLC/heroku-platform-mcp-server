@@ -40,9 +40,21 @@ export function buildMcpRoutes(deps: McpRouteDeps): Hono<AppEnv> {
   // multiplexes by method.
   router.all('/mcp', async (c) => {
     const auth = c.get('auth');
-    if (auth?.kind !== 'bearer' || !auth.connectionToken) {
+    if (auth?.kind !== 'bearer' && auth?.kind !== 'oauth') {
       return c.json({ ok: false, error: { kind: 'auth', message: 'bearer required' } }, 401);
     }
+    if (auth.kind === 'bearer' && !auth.connectionToken) {
+      return c.json({ ok: false, error: { kind: 'auth', message: 'bearer required' } }, 401);
+    }
+    if (auth.kind === 'oauth' && !auth.oauthToken) {
+      return c.json({ ok: false, error: { kind: 'auth', message: 'bearer required' } }, 401);
+    }
+    const tokenFingerprint =
+      auth.kind === 'bearer'
+        ? auth.connectionToken!.id.slice(0, 16)
+        : auth.oauthToken!.clientId.slice(0, 16);
+    const connectionTokenId = auth.kind === 'bearer' ? auth.connectionToken!.id : null;
+    const oauthClientId = auth.kind === 'oauth' ? auth.oauthToken!.clientId : null;
 
     const sessionIdHeader = c.req.header('mcp-session-id');
     let session = deps.transports.get(sessionIdHeader);
@@ -90,7 +102,7 @@ export function buildMcpRoutes(deps: McpRouteDeps): Hono<AppEnv> {
       const sessionId = generateSessionId();
       const built = await buildSessionMcp({
         accessToken,
-        tokenFingerprint: auth.connectionToken.id.slice(0, 16),
+        tokenFingerprint,
         auditSink: dbAuditSink(deps.pool),
         getAuditContext: () => ({
           userId: auth.user.id,
@@ -110,7 +122,8 @@ export function buildMcpRoutes(deps: McpRouteDeps): Hono<AppEnv> {
       session = deps.transports.register(
         {
           userId: auth.user.id,
-          connectionTokenId: auth.connectionToken.id,
+          connectionTokenId,
+          oauthClientId,
           built,
           transport,
           clientName: null,
@@ -141,7 +154,10 @@ export function buildMcpRoutes(deps: McpRouteDeps): Hono<AppEnv> {
         status: 'ok',
         clientName: session.clientName,
         clientVersion: session.clientVersion,
-        details: { connection_token_id: auth.connectionToken.id },
+        details:
+          auth.kind === 'bearer'
+            ? { connection_token_id: auth.connectionToken!.id }
+            : { oauth_client_id: auth.oauthToken!.clientId },
       }).catch(() => undefined);
     }
 
