@@ -41,6 +41,7 @@ import { buildAuditRoutes } from './routes/audit.js';
 import { buildAdminRoutes } from './routes/admin.js';
 import { buildMcpRoutes } from './routes/mcp.js';
 import { buildWellKnownRoutes } from './routes/wellknown.js';
+import { buildDcrRoutes } from './oauth-provider/dcr.js';
 import type { TransportManager } from './mcp/transport.js';
 import type { WebSocketFactory } from './mcp/dynos-run.js';
 
@@ -92,6 +93,9 @@ export function buildApp(opts: BuildAppOptions): BuiltApp {
   // unauthenticated and not subject to the session-cookie reader (which is
   // harmless but unnecessary).
   app.route('/', buildWellKnownRoutes({ publicUrl: opts.cfg.publicUrl }));
+
+  // OAuth provider routes (DCR, authorize, token, revoke).
+  app.route('/', buildDcrRoutes({ pool: opts.pool, publicUrl: opts.cfg.publicUrl }));
 
   // Public routes (landing, sign-in, callback, sign-out). Reads `auth` from
   // context but doesn't gate on it.
