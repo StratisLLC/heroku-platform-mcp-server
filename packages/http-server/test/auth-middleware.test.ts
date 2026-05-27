@@ -21,10 +21,16 @@ function makeApp(adminEmails: string[] = []) {
   const masterKey = generateMasterKey();
   const pool = createFakePool();
   const app = new Hono<AppEnv>();
-  app.use('/web/*', webSessionAuth({ pool: pool as never, masterKey, adminEmails }));
+  const mwDeps = {
+    pool: pool as never,
+    masterKey,
+    adminEmails,
+    publicUrl: 'https://test.example.com',
+  };
+  app.use('/web/*', webSessionAuth(mwDeps));
   app.use('/web/admin/*', requireAdmin());
   app.use('/web/me/*', requireWebAuth());
-  app.use('/api/*', bearerAuth({ pool: pool as never, masterKey, adminEmails }));
+  app.use('/api/*', bearerAuth(mwDeps));
   app.get('/web/home', (c) =>
     c.text(c.get('auth') ? `signed-in ${c.get('auth')!.user.email}` : 'anon'),
   );

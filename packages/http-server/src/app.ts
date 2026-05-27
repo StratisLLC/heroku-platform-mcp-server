@@ -74,6 +74,7 @@ export function buildApp(opts: BuildAppOptions): BuiltApp {
     pool: opts.pool,
     masterKey: opts.cfg.masterKey,
     adminEmails: opts.cfg.adminEmails,
+    publicUrl: opts.cfg.publicUrl,
   };
 
   const app = new Hono<AppEnv>();

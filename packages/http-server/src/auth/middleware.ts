@@ -16,6 +16,11 @@ import {
   touchTokenLastUsed,
   type ConnectionTokenRow,
 } from '../db/repos/connection-tokens.js';
+import {
+  findActiveOAuthTokenByAccessHash,
+  type OAuthTokenRow,
+} from '../db/repos/oauth-tokens.js';
+import { touchClientLastUsed } from '../db/repos/oauth-clients.js';
 import { findUserById, touchLastSeen, type UserRow } from '../db/repos/users.js';
 import { isAdminEmail } from '../access/allowlist.js';
 import { hashToken, parseBearer } from './connection-token.js';
@@ -29,10 +34,12 @@ export interface AppEnv {
 }
 
 export interface AuthenticatedPrincipal {
-  kind: 'web' | 'bearer';
+  kind: 'web' | 'bearer' | 'oauth';
   user: UserRow;
-  /** Set when authenticated by Bearer token. */
+  /** Set when authenticated by long-lived bearer token (connection_tokens). */
   connectionToken?: ConnectionTokenRow;
+  /** Set when authenticated by OAuth-issued access token (oauth_tokens). */
+  oauthToken?: OAuthTokenRow;
   isAdmin: boolean;
 }
 
@@ -40,30 +47,74 @@ export interface MiddlewareDeps {
   pool: pg.Pool;
   masterKey: Uint8Array;
   adminEmails: string[];
+  /** Base URL used to build the WWW-Authenticate `resource_metadata` parameter
+   *  on 401 — this is how Claude Desktop discovers our auth server. */
+  publicUrl: string;
 }
 
 /**
  * Resolve the bearer token from the Authorization header (if present),
  * verify it, and put the resolved principal on context. Updates
  * `last_used_at` / `last_seen_at` as a side effect.
+ *
+ * Two lookups, in order:
+ *   1. oauth_tokens (Phase 4.5 OAuth provider flow) — short-lived, must not
+ *      be expired or revoked.
+ *   2. connection_tokens (Phase 4 bearer flow) — long-lived, only revocation
+ *      gates use.
+ *
+ * Both store SHA-256(token) of `hmcp_`-prefixed values, so the same incoming
+ * Authorization header works for either path.
+ *
+ * On 401, we attach the RFC 9728 `WWW-Authenticate: Bearer
+ * resource_metadata="<base>/.well-known/oauth-protected-resource"` header so
+ * MCP clients (Claude Desktop) can discover the auth server and start a fresh
+ * OAuth flow.
  */
 export function bearerAuth(deps: MiddlewareDeps) {
+  const unauth = (c: Context<AppEnv>, message: string): Response => {
+    c.header(
+      'WWW-Authenticate',
+      `Bearer resource_metadata="${deps.publicUrl.replace(/\/$/, '')}/.well-known/oauth-protected-resource"`,
+    );
+    return c.json({ ok: false, error: { kind: 'auth', message } }, 401);
+  };
+
   return async (c: Context<AppEnv>, next: Next): Promise<void | Response> => {
     const token = parseBearer(c.req.header('authorization'));
     if (!token) {
-      return c.json({ ok: false, error: { kind: 'auth', message: 'missing bearer token' } }, 401);
+      return unauth(c, 'missing bearer token');
     }
     const hash = hashToken(token);
+
+    // 1) OAuth-provider issued access token (Phase 4.5).
+    const oauthRow = await findActiveOAuthTokenByAccessHash(deps.pool, hash);
+    if (oauthRow) {
+      const user = await findUserById(deps.pool, oauthRow.userId);
+      if (!user) {
+        return unauth(c, 'user not found');
+      }
+      await touchClientLastUsed(deps.pool, oauthRow.clientId).catch(() => undefined);
+      await touchLastSeen(deps.pool, user.id).catch(() => undefined);
+      const principal: AuthenticatedPrincipal = {
+        kind: 'oauth',
+        user,
+        oauthToken: oauthRow,
+        isAdmin: isAdminEmail(user.email, deps.adminEmails),
+      };
+      c.set('auth', principal);
+      await next();
+      return;
+    }
+
+    // 2) Long-lived bearer token (Phase 4).
     const tokenRow = await findActiveTokenByHash(deps.pool, hash);
     if (!tokenRow) {
-      return c.json(
-        { ok: false, error: { kind: 'auth', message: 'invalid or revoked token' } },
-        401,
-      );
+      return unauth(c, 'invalid or revoked token');
     }
     const user = await findUserById(deps.pool, tokenRow.userId);
     if (!user) {
-      return c.json({ ok: false, error: { kind: 'auth', message: 'user not found' } }, 401);
+      return unauth(c, 'user not found');
     }
     await touchTokenLastUsed(deps.pool, tokenRow.id).catch(() => undefined);
     await touchLastSeen(deps.pool, user.id).catch(() => undefined);
