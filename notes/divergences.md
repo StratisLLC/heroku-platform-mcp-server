@@ -460,3 +460,9 @@ figure in PHASE-4.5.md's table conflated unit-test files and e2e files.
 ## 65. Phase 4.5 — what step 12 (manual smoke test against Claude Desktop) requires
 
 **Observation:** PHASE-4.5.md step 12 is explicitly out of scope for the implementation pass — it requires an HTTPS-reachable deployment (ngrok or actual Heroku app) plus a real Claude Desktop install, and Claude Desktop will not complete OAuth against an `http://localhost` URL. The integration test (step 10) walks the same flow with curl-equivalent fetches and verifies every protocol step except the actual Claude Desktop UI rendering. Smoke-test handoff lives in the project's deployment runbook.
+
+## 66. Phase 4 / 4.5 — Heroku token response schema requires .nullish() not .optional()
+
+**Observation:** Heroku's /oauth/token endpoint returns user_id and session_nonce as literal null for some authorization flows (notably the post-PKCE authorization-code grant we use). Zod's .optional() accepts undefined but rejects null. The fix is .nullish() which accepts both. This was discovered during Phase 4 debug, lost during Phase 4.5 refactor, re-discovered during Phase 4.5 smoke test. Regression test added in packages/http-server/test/oauth.test.ts to prevent a fourth occurrence.
+
+**Rule for the future:** Any Zod schema that parses third-party API responses where a field might be omitted OR null should default to .nullish() rather than .optional(). Reserve .optional() for cases where the API contract guarantees the field is either present-with-value or absent entirely.

@@ -5,6 +5,7 @@ import {
   fetchAccount,
   fetchTeams,
   HerokuOAuthError,
+  HerokuTokenResponse,
   type HerokuOAuthConfig,
 } from '../src/oauth/heroku.js';
 
@@ -110,6 +111,94 @@ describe('exchangeAuthorizationCode', () => {
         },
       ),
     ).rejects.toBeInstanceOf(HerokuOAuthError);
+  });
+});
+
+describe('HerokuTokenResponse schema', () => {
+  // Regression: Heroku's /oauth/token returns user_id and session_nonce as
+  // literal null for post-PKCE authorization-code grants. Zod's .optional()
+  // accepts undefined but REJECTS null — we must use .nullish(). This bug
+  // has been re-introduced twice; this test fails fast if anyone reverts.
+  // See notes/divergences.md #66.
+  it('accepts user_id: null and session_nonce: null (PKCE flow)', () => {
+    const parsed = HerokuTokenResponse.safeParse({
+      access_token: 'AT',
+      refresh_token: 'RT',
+      expires_in: 28800,
+      token_type: 'Bearer',
+      user_id: null,
+      session_nonce: null,
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.user_id).toBeNull();
+      expect(parsed.data.session_nonce).toBeNull();
+    }
+  });
+
+  it('still accepts the fields when omitted entirely', () => {
+    const parsed = HerokuTokenResponse.safeParse({
+      access_token: 'AT',
+      refresh_token: 'RT',
+      expires_in: 28800,
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it('still accepts string values', () => {
+    const parsed = HerokuTokenResponse.safeParse({
+      access_token: 'AT',
+      refresh_token: 'RT',
+      expires_in: 28800,
+      user_id: 'user-uuid',
+      session_nonce: 'nonce-uuid',
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it('rejects access_token that is missing or empty', () => {
+    expect(
+      HerokuTokenResponse.safeParse({
+        refresh_token: 'RT',
+        expires_in: 28800,
+      }).success,
+    ).toBe(false);
+    expect(
+      HerokuTokenResponse.safeParse({
+        access_token: '',
+        refresh_token: 'RT',
+        expires_in: 28800,
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('exchangeAuthorizationCode — null user_id / session_nonce regression', () => {
+  // End-to-end version of the schema regression: ensures that a real Heroku
+  // response body with null fields makes it through exchangeAuthorizationCode
+  // without throwing.
+  it('parses a token response with user_id: null and session_nonce: null', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            access_token: 'AT',
+            refresh_token: 'RT',
+            expires_in: 28800,
+            token_type: 'Bearer',
+            user_id: null,
+            session_nonce: null,
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    );
+    const res = await exchangeAuthorizationCode(
+      { ...cfg, fetch: fetchMock },
+      { code: 'AC', codeVerifier: 'V' },
+    );
+    expect(res.access_token).toBe('AT');
+    expect(res.user_id).toBeNull();
+    expect(res.session_nonce).toBeNull();
   });
 });
 

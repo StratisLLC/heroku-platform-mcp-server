@@ -13,8 +13,8 @@ export const HerokuTokenResponse = z.object({
   refresh_token: z.string().min(1),
   expires_in: z.number().int().positive(),
   token_type: z.string().optional(),
-  user_id: z.string().optional(),
-  session_nonce: z.string().optional(),
+  user_id: z.string().nullish(),
+  session_nonce: z.string().nullish(),
 });
 export type HerokuTokenResponse = z.infer<typeof HerokuTokenResponse>;
 

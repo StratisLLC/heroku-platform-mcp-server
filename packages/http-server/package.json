@@ -1,6 +1,6 @@
 {
   "name": "@heroku-mcp/http-server",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Hosted HTTP MCP server for Heroku Platform. Streamable HTTP transport, Heroku OAuth sign-in, Postgres-backed encrypted token store, per-user audit log, admin UI.",
   "license": "Apache-2.0",
   "type": "module",
