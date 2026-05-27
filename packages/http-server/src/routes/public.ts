@@ -220,7 +220,17 @@ export function buildPublicRoutes(deps: PublicRoutesDeps): Hono<AppEnv> {
     });
     deps.pendingTokens.set(sealed, result.newConnectionToken.plaintext);
 
-    return c.redirect('/me');
+    // Honor the original sign-in initiator's redirect target. Restricted to
+    // same-origin (must start with '/') to avoid open-redirect. The OAuth
+    // provider authorize endpoint uses this to bring the user back to a
+    // /oauth/authorize?... URL after a successful Heroku sign-in.
+    const target =
+      typeof result.redirectAfterLogin === 'string' &&
+      result.redirectAfterLogin.startsWith('/') &&
+      !result.redirectAfterLogin.startsWith('//')
+        ? result.redirectAfterLogin
+        : '/me';
+    return c.redirect(target);
   });
 
   router.post('/sign-out', async (c) => {
