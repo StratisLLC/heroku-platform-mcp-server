@@ -54,11 +54,52 @@ interface AuditEntry {
   details: Record<string, unknown> | null;
 }
 
+interface OAuthClient {
+  client_id: string;
+  client_secret_hash: Buffer;
+  client_name: string | null;
+  redirect_uris: string[];
+  grant_types: string[];
+  token_endpoint_auth_method: string;
+  user_id: string | null;
+  created_at: Date;
+  last_used_at: Date | null;
+  revoked_at: Date | null;
+}
+
+interface OAuthAuthorization {
+  code_hash: Buffer;
+  client_id: string;
+  user_id: string;
+  redirect_uri: string;
+  code_challenge: string;
+  code_challenge_method: string;
+  scope: string | null;
+  state: string | null;
+  expires_at: Date;
+  used_at: Date | null;
+  created_at: Date;
+}
+
+interface OAuthToken {
+  access_token_hash: Buffer;
+  refresh_token_hash: Buffer;
+  client_id: string;
+  user_id: string;
+  expires_at: Date;
+  refresh_expires_at: Date;
+  revoked_at: Date | null;
+  created_at: Date;
+}
+
 export class FakeStore {
   users: User[] = [];
   herokuTokens: HerokuToken[] = [];
   connectionTokens: ConnectionToken[] = [];
   auditLog: AuditEntry[] = [];
+  oauthClients: OAuthClient[] = [];
+  oauthAuthorizations: OAuthAuthorization[] = [];
+  oauthTokens: OAuthToken[] = [];
   appliedMigrations: string[] = [];
   private nextAuditId = 1;
 
@@ -303,6 +344,179 @@ export function createFakePool(store: FakeStore = new FakeStore()): FakePool {
       const n = store.auditLog.length;
       store.auditLog = [];
       return { rows: [] as T[], rowCount: n };
+    }
+    // ------------------------------------------------------------------
+    // oauth_clients
+    // ------------------------------------------------------------------
+    if (sql.startsWith('INSERT INTO oauth_clients')) {
+      const row: OAuthClient = {
+        client_id: String(values[0]),
+        client_secret_hash: Buffer.from(values[1] as Uint8Array),
+        client_name: (values[2] as string | null) ?? null,
+        redirect_uris: (values[3] as string[]) ?? [],
+        grant_types: (values[4] as string[]) ?? ['authorization_code', 'refresh_token'],
+        token_endpoint_auth_method: String(values[5] ?? 'client_secret_basic'),
+        user_id: null,
+        created_at: new Date(),
+        last_used_at: null,
+        revoked_at: null,
+      };
+      store.oauthClients.push(row);
+      return { rows: [row as unknown as T], rowCount: 1 };
+    }
+    if (sql.startsWith('SELECT client_id, client_secret_hash')) {
+      if (sql.includes('WHERE client_id =')) {
+        const c = store.oauthClients.find((x) => x.client_id === String(values[0]));
+        return { rows: c ? [c as unknown as T] : [], rowCount: c ? 1 : 0 };
+      }
+      if (sql.includes('WHERE user_id =')) {
+        const includeRevoked = !sql.includes('AND revoked_at IS NULL');
+        const rows = store.oauthClients
+          .filter((x) => x.user_id === String(values[0]))
+          .filter((x) => includeRevoked || x.revoked_at === null)
+          .sort((a, b) => b.created_at.valueOf() - a.created_at.valueOf());
+        return { rows: rows as unknown as T[], rowCount: rows.length };
+      }
+    }
+    if (sql.startsWith('UPDATE oauth_clients SET user_id')) {
+      const c = store.oauthClients.find((x) => x.client_id === String(values[0]));
+      if (c) {
+        c.user_id = String(values[1]);
+        c.last_used_at = new Date();
+      }
+      return { rows: [] as T[], rowCount: c ? 1 : 0 };
+    }
+    if (sql.startsWith('UPDATE oauth_clients SET last_used_at')) {
+      const c = store.oauthClients.find((x) => x.client_id === String(values[0]));
+      if (c) c.last_used_at = new Date();
+      return { rows: [] as T[], rowCount: c ? 1 : 0 };
+    }
+    if (sql.startsWith('UPDATE oauth_clients SET revoked_at')) {
+      const c = store.oauthClients.find(
+        (x) => x.client_id === String(values[0]) && x.revoked_at === null,
+      );
+      if (c) c.revoked_at = new Date();
+      return { rows: [] as T[], rowCount: c ? 1 : 0 };
+    }
+    // ------------------------------------------------------------------
+    // oauth_authorizations
+    // ------------------------------------------------------------------
+    if (sql.startsWith('INSERT INTO oauth_authorizations')) {
+      const row: OAuthAuthorization = {
+        code_hash: Buffer.from(values[0] as Uint8Array),
+        client_id: String(values[1]),
+        user_id: String(values[2]),
+        redirect_uri: String(values[3]),
+        code_challenge: String(values[4]),
+        code_challenge_method: String(values[5] ?? 'S256'),
+        scope: (values[6] as string | null) ?? null,
+        state: (values[7] as string | null) ?? null,
+        expires_at: values[8] as Date,
+        used_at: null,
+        created_at: new Date(),
+      };
+      store.oauthAuthorizations.push(row);
+      return { rows: [row as unknown as T], rowCount: 1 };
+    }
+    if (sql.startsWith('SELECT code_hash, client_id, user_id, redirect_uri')) {
+      const hash = Buffer.from(values[0] as Uint8Array);
+      const a = store.oauthAuthorizations.find((x) => x.code_hash.equals(hash));
+      return { rows: a ? [a as unknown as T] : [], rowCount: a ? 1 : 0 };
+    }
+    if (sql.startsWith('UPDATE oauth_authorizations SET used_at')) {
+      const hash = Buffer.from(values[0] as Uint8Array);
+      const a = store.oauthAuthorizations.find(
+        (x) => x.code_hash.equals(hash) && x.used_at === null,
+      );
+      if (a) a.used_at = new Date();
+      return { rows: [] as T[], rowCount: a ? 1 : 0 };
+    }
+    if (sql.startsWith('DELETE FROM oauth_authorizations')) {
+      const now = Date.now();
+      const before = store.oauthAuthorizations.length;
+      store.oauthAuthorizations = store.oauthAuthorizations.filter(
+        (x) => x.expires_at.valueOf() >= now,
+      );
+      return { rows: [] as T[], rowCount: before - store.oauthAuthorizations.length };
+    }
+    // ------------------------------------------------------------------
+    // oauth_tokens
+    // ------------------------------------------------------------------
+    if (sql.startsWith('INSERT INTO oauth_tokens')) {
+      const row: OAuthToken = {
+        access_token_hash: Buffer.from(values[0] as Uint8Array),
+        refresh_token_hash: Buffer.from(values[1] as Uint8Array),
+        client_id: String(values[2]),
+        user_id: String(values[3]),
+        expires_at: values[4] as Date,
+        refresh_expires_at: values[5] as Date,
+        revoked_at: null,
+        created_at: new Date(),
+      };
+      store.oauthTokens.push(row);
+      return { rows: [row as unknown as T], rowCount: 1 };
+    }
+    if (sql.startsWith('SELECT access_token_hash, refresh_token_hash')) {
+      const now = Date.now();
+      if (sql.includes('WHERE access_token_hash =') && sql.includes('expires_at > now()')) {
+        const hash = Buffer.from(values[0] as Uint8Array);
+        const t = store.oauthTokens.find(
+          (x) =>
+            x.access_token_hash.equals(hash) &&
+            x.revoked_at === null &&
+            x.expires_at.valueOf() > now,
+        );
+        return { rows: t ? [t as unknown as T] : [], rowCount: t ? 1 : 0 };
+      }
+      if (sql.includes('WHERE access_token_hash =')) {
+        const hash = Buffer.from(values[0] as Uint8Array);
+        const t = store.oauthTokens.find((x) => x.access_token_hash.equals(hash));
+        return { rows: t ? [t as unknown as T] : [], rowCount: t ? 1 : 0 };
+      }
+      if (sql.includes('WHERE refresh_token_hash =')) {
+        const hash = Buffer.from(values[0] as Uint8Array);
+        const t = store.oauthTokens.find((x) => x.refresh_token_hash.equals(hash));
+        return { rows: t ? [t as unknown as T] : [], rowCount: t ? 1 : 0 };
+      }
+      if (sql.includes('WHERE user_id = $1 AND client_id = $2')) {
+        const rows = store.oauthTokens
+          .filter(
+            (x) =>
+              x.user_id === String(values[0]) &&
+              x.client_id === String(values[1]) &&
+              x.revoked_at === null,
+          )
+          .sort((a, b) => b.created_at.valueOf() - a.created_at.valueOf());
+        return { rows: rows as unknown as T[], rowCount: rows.length };
+      }
+    }
+    if (sql.startsWith('UPDATE oauth_tokens SET revoked_at')) {
+      if (sql.includes('WHERE access_token_hash =')) {
+        const hash = Buffer.from(values[0] as Uint8Array);
+        const t = store.oauthTokens.find(
+          (x) => x.access_token_hash.equals(hash) && x.revoked_at === null,
+        );
+        if (t) t.revoked_at = new Date();
+        return { rows: [] as T[], rowCount: t ? 1 : 0 };
+      }
+      if (sql.includes('WHERE refresh_token_hash =')) {
+        const hash = Buffer.from(values[0] as Uint8Array);
+        const t = store.oauthTokens.find(
+          (x) => x.refresh_token_hash.equals(hash) && x.revoked_at === null,
+        );
+        if (t) t.revoked_at = new Date();
+        return { rows: [] as T[], rowCount: t ? 1 : 0 };
+      }
+      if (sql.includes('WHERE client_id =')) {
+        let n = 0;
+        for (const t of store.oauthTokens) {
+          if (t.client_id === String(values[0]) && t.revoked_at === null) {
+            t.revoked_at = new Date();
+            n += 1;
+          }
+        }
+        return { rows: [] as T[], rowCount: n };
+      }
     }
     // ------------------------------------------------------------------
     // probes / schema_migrations / generic
