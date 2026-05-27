@@ -386,3 +386,8 @@ Sanitization runs args through `@heroku-mcp/core/redact`; the literal `confirm` 
 **Tool count unchanged**: 240 tools, all exposed via the HTTP endpoint with the buffered `dynos_run` substituted for the Phase-2a stub.
 
 **New tests**: 151 across core (20 crypto), http-server (122), admin-cli (9). Plus 3 e2e integration tests gated on `HEROKUMCP_TEST_DATABASE_URL`. Workspace total: 634 passing + 3 skipped.
+
+## 55. Phase 4 → 4.5 — bearer-token-only auth was insufficient for Claude Desktop Custom Connector
+**Observation:** Phase 4 shipped with bearer-token auth (`hmcp_` in `Authorization: Bearer` header) under the assumption that this was sufficient for all Claude clients. Post-ship discovery: Claude Desktop's Custom Connector UI offers no field for a pre-issued bearer token — it expects the server to be a full OAuth 2.1 authorization server with Dynamic Client Registration. The MCP authorization spec explicitly prohibits credentials in URL query strings, so there is no workaround. Phase 4.5 adds an OAuth provider layer (DCR + authorize + token + revoke + .well-known metadata) on top of the existing bearer-token machinery. Both paths coexist after 4.5: bearer for Claude Code / MCP Inspector / curl / scripting; OAuth for Claude Desktop. Same `hmcp_` token format under the hood — the middleware tries `oauth_tokens` first, falls back to `connection_tokens`.
+**Lesson:** Any phase introducing a new client-facing transport must check the actual UI surface of each Claude client (Desktop GUI, Code CLI, Web, Mobile) against the MCP spec before locking the auth model. Different clients exercise different parts of the spec — Claude Code accepts custom headers; Claude Desktop Custom Connector requires OAuth 2.1.
+See PHASE-4.5.md for the full design.
