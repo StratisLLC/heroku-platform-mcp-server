@@ -391,3 +391,72 @@ Sanitization runs args through `@heroku-mcp/core/redact`; the literal `confirm` 
 **Observation:** Phase 4 shipped with bearer-token auth (`hmcp_` in `Authorization: Bearer` header) under the assumption that this was sufficient for all Claude clients. Post-ship discovery: Claude Desktop's Custom Connector UI offers no field for a pre-issued bearer token — it expects the server to be a full OAuth 2.1 authorization server with Dynamic Client Registration. The MCP authorization spec explicitly prohibits credentials in URL query strings, so there is no workaround. Phase 4.5 adds an OAuth provider layer (DCR + authorize + token + revoke + .well-known metadata) on top of the existing bearer-token machinery. Both paths coexist after 4.5: bearer for Claude Code / MCP Inspector / curl / scripting; OAuth for Claude Desktop. Same `hmcp_` token format under the hood — the middleware tries `oauth_tokens` first, falls back to `connection_tokens`.
 **Lesson:** Any phase introducing a new client-facing transport must check the actual UI surface of each Claude client (Desktop GUI, Code CLI, Web, Mobile) against the MCP spec before locking the auth model. Different clients exercise different parts of the spec — Claude Code accepts custom headers; Claude Desktop Custom Connector requires OAuth 2.1.
 See PHASE-4.5.md for the full design.
+
+---
+
+# Phase 4.5 divergences
+
+## 56. Phase 4.5 — HEROKUMCP_PUBLIC_URL is now required (was optional)
+
+**Observation:** Phase 4 treated `HEROKUMCP_PUBLIC_URL` as an optional override; the `/me` route fell back to inferring `${proto}://${host}` from request headers when unset. Phase 4.5's OAuth metadata documents (`.well-known/oauth-authorization-server`, `.well-known/oauth-protected-resource`) must emit absolute, externally-resolvable URLs, and the `WWW-Authenticate` header on 401 must do the same — so the env var is now required with Zod validation (`^https?://` + non-empty). The previous `inferPublicUrl` helper in `routes/me.ts` is removed.
+
+**Doc impact:** [packages/http-server/README.md](packages/http-server/README.md) moved the var from the "optional" table to "required" and DEPLOYMENT.md already documents it as required for 4.5+.
+
+## 57. Phase 4.5 — `/oauth/callback` honors `flow.redirectAfterLogin` instead of hard-coding `/me`
+
+**Observation:** Phase 4's `/oauth/callback` always redirected to `/me` after a successful Heroku sign-in. Phase 4.5's `/oauth/authorize` needs to bring the user back to itself after a sign-in detour (so the OAuth provider flow can continue past the consent / auto-allow step). `/oauth/callback` now reads `flow.redirectAfterLogin` from the flow cookie and redirects there, restricted to same-origin paths (`startsWith('/')` and not `'//'`) to prevent open-redirect. Defaults to `/me` when unset or unsafe.
+
+## 58. Phase 4.5 — consent is skipped for allowlisted users (D2)
+
+**Observation:** PHASE-4.5.md D2 specifies that users in `MCP_ALLOWED_EMAILS` or `MCP_ALLOWED_TEAMS` skip the consent screen — the operator has already pre-authorized them. The check uses the same `evaluateAccess()` from the access module that gates `/sign-in`, after re-fetching the user's Heroku teams via the stored access token. If teams can't be fetched (token rotated, network blip), we treat the team list as empty — the user falls through to consent rather than getting auto-allowed on stale state.
+
+**Behavior on an "open" deployment** (no allowlist set): everyone sees consent. The deployment is by definition opened to "any Heroku user," so the consent screen is the only thing telling them what app they're authorizing.
+
+## 59. Phase 4.5 — SessionEntry gains `oauthClientId`; `evictByOauthClient` added
+
+**Observation:** Phase 4's `SessionEntry.connectionTokenId` was a required string. With OAuth-issued sessions, there is no connection-token row backing them. Made `connectionTokenId: string | null` and added `oauthClientId: string | null` alongside; exactly one is non-null for any given session. `evictByOauthClient(clientId)` mirrors `evictByConnectionToken(tokenId)` so revoking an OAuth client from `/me` only kills that client's sessions (not the user's bearer-token sessions).
+
+## 60. Phase 4.5 — refresh-token rotation race is 401, not 500
+
+**Observation:** PHASE-4.5.md R3 calls out the race where Claude Desktop fires two requests near-simultaneously, both notice the access token has expired, both POST to `/oauth/token` to refresh, and the loser presents a now-revoked refresh token on the second call. We chose to return 400 `invalid_grant` (matches RFC 6749 wording) for the loser at the token endpoint, and 401 with `WWW-Authenticate: Bearer` at `/mcp` for any subsequent request with the loser's old access token. Both error shapes signal "retry from refresh" to a well-behaved client; the alternative of 500 would have made the race look like a server bug.
+
+## 61. Phase 4.5 — `client_secret_expires_at: 0` (never expires)
+
+**Observation:** RFC 7591 lets us pick a secret rotation window. We don't rotate at the registration layer — to invalidate a leaked secret, the operator (or the affected user, via `/me`) revokes the client. Setting a rotation window would have forced periodic re-registration on every Claude Desktop, which is not a UX win since DCR is invisible to the user.
+
+## 62. Phase 4.5 — bearer middleware tries OAuth first, falls back to connection_tokens
+
+**Observation:** The lookup order in `auth/middleware.ts:bearerAuth` is (1) `oauth_tokens` (active + unexpired), (2) `connection_tokens` (active). This matters when a hash collision exists between the two tables: OAuth wins. Practical impact is zero — both tables hash 256-bit-entropy tokens, collisions are vanishingly improbable — but the ordering is documented in code and a unit test pins the precedence so a future refactor can't quietly swap it.
+
+## 63. Phase 4.5 — `/oauth/authorize` and `/oauth/consent` paths
+
+**Observation:** PHASE-4.5.md sequence diagrams show the user round-tripping through `/oauth/authorize` only. We split the consent decision out to a separate `POST /oauth/consent` endpoint that takes the form values as hidden inputs from the rendered consent screen. Keeps the GET handler idempotent and the POST handler simple (no query-string POST). The "skip consent for allowlisted users" path stays inside the GET handler — no POST is involved.
+
+## 64. Phase 4.5 — final test count
+
+**New tests** added by Phase 4.5 (87 unit + 2 integration, gated on `HEROKUMCP_TEST_DATABASE_URL`):
+
+  Repos (17):              insert/find/revoke for oauth_clients,
+                           oauth_authorizations, oauth_tokens
+  Metadata (7):            .well-known docs + AuthorizationServerMetadata builder
+  Config (3):              HEROKUMCP_PUBLIC_URL required + URL-shape + trim
+  DCR (13):                POST /oauth/register happy path + validation
+  Authorize (13):          query validation, client/redirect_uri checks,
+                           sign-in redirect, consent render, allowlist short-
+                           circuit, consent POST allow/deny
+  Token (17):              authorization_code + refresh_token grants, PKCE,
+                           replay, expiry, wrong client, basic+post auth
+  Revoke (7):              RFC 7009 idempotency, hint handling, cross-client
+  Middleware (7):          OAuth+bearer paths, WWW-Authenticate, priority
+  /me Connected Apps (6):  list, revoke endpoint, 404 for cross-user
+  Integration (2 e2e):     full register→authorize→token→/mcp→refresh→
+                           /mcp→revoke walk against real Postgres
+
+Workspace totals after Phase 4.5: 724 unit + 5 integration (3 pre-existing
+Phase 4 e2e + 2 Phase 4.5 oauth e2e). All passing locally against
+Postgres 16. Phase 4 baseline was 634 unit + 3 integration; the 8-integration
+figure in PHASE-4.5.md's table conflated unit-test files and e2e files.
+
+## 65. Phase 4.5 — what step 12 (manual smoke test against Claude Desktop) requires
+
+**Observation:** PHASE-4.5.md step 12 is explicitly out of scope for the implementation pass — it requires an HTTPS-reachable deployment (ngrok or actual Heroku app) plus a real Claude Desktop install, and Claude Desktop will not complete OAuth against an `http://localhost` URL. The integration test (step 10) walks the same flow with curl-equivalent fetches and verifies every protocol step except the actual Claude Desktop UI rendering. Smoke-test handoff lives in the project's deployment runbook.

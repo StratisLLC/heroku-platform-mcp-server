@@ -4,9 +4,19 @@ Hosted Streamable-HTTP MCP server for the Heroku Platform API.
 
 Per-user OAuth sign-in. Encrypted Postgres token store. Full audit log. Admin UI.
 Wraps the same 240 tools that the stdio binary
-(`@heroku-mcp/platform`'s `herokumcp-platform` command) exposes, but
-authenticates each MCP client with a long-lived bearer token (`hmcp_…`)
-instead of a Heroku API token in the user's keychain.
+(`@heroku-mcp/platform`'s `herokumcp-platform` command) exposes.
+
+Two ways to authenticate an MCP client:
+
+1. **OAuth 2.1 Custom Connector** (recommended for Claude Desktop) — the
+   server is a full OAuth 2.1 authorization server with Dynamic Client
+   Registration. Claude Desktop's *Settings → Connectors → Add custom
+   connector* dialog handles everything once you paste your `/mcp` URL.
+2. **Bearer token** (Claude Code, MCP Inspector, curl, scripts) — sign in on
+   `/me` and copy a long-lived `hmcp_…` token to paste into a custom
+   `Authorization: Bearer` header.
+
+Both paths coexist for the same user; see [`/me`](#me-page) for management.
 
 ## Why hosted mode
 
@@ -37,13 +47,20 @@ export HEROKUMCP_MASTER_KEY=$(openssl rand -base64 32)
 export HEROKUMCP_OAUTH_CLIENT_ID=<id from step 2>
 export HEROKUMCP_OAUTH_CLIENT_SECRET=<secret from step 2>
 export HEROKUMCP_ADMIN_CONTACT=admin@example.com
+export HEROKUMCP_PUBLIC_URL=http://localhost:3000
 export MCP_ADMIN_EMAILS=$(your-heroku-email)
 
 pnpm --filter @heroku-mcp/http-server start
 ```
 
 Visit <http://localhost:3000>, click **Sign in with Heroku**, complete the
-OAuth round-trip, and copy the freshly-minted `hmcp_…` token from `/me`.
+OAuth round-trip, then either:
+
+- (Recommended for Claude Desktop) Open *Claude Desktop → Settings →
+  Connectors → Add custom connector* and paste `http://localhost:3000/mcp`.
+  Click *Connect*; Claude Desktop handles the OAuth round-trip from there.
+- (Claude Code etc.) Copy the freshly-minted `hmcp_…` token from `/me`'s
+  *Advanced: bearer token* section.
 
 ## Required env vars
 
@@ -51,34 +68,68 @@ OAuth round-trip, and copy the freshly-minted `hmcp_…` token from `/me`.
 |---|---|
 | `DATABASE_URL` | Postgres connection string. |
 | `HEROKUMCP_MASTER_KEY` | 32-byte base64-encoded AES-256 KEK. Generate with `openssl rand -base64 32`. **Losing this makes every stored token unreadable**. |
-| `HEROKUMCP_OAUTH_CLIENT_ID` | The OAuth client `id` from `heroku clients:create`. |
+| `HEROKUMCP_OAUTH_CLIENT_ID` | The OAuth client `id` from `heroku clients:create`. Used to sign your users into *Heroku*. |
 | `HEROKUMCP_OAUTH_CLIENT_SECRET` | The corresponding `secret`. |
 | `HEROKUMCP_ADMIN_CONTACT` | Email/URL shown on access-denied pages. |
+| `HEROKUMCP_PUBLIC_URL` | Externally-resolvable base URL (e.g. `https://herokumcp.example.com`). Required for the OAuth 2.1 Custom Connector flow — the `.well-known/oauth-*` metadata documents and the `WWW-Authenticate` header on 401 both reference it. No default, must be set. |
 
 ## Optional env vars
 
 | Var | Default | Purpose |
 |---|---|---|
 | `PORT` | `3000` | HTTP port. |
-| `HEROKUMCP_PUBLIC_URL` | derived from request | External base URL. |
 | `HEROKUMCP_OAUTH_SCOPE` | `write-protected` | Heroku OAuth scope. |
-| `MCP_ALLOWED_EMAILS` | (unset = anyone) | Comma-separated allowlist. |
-| `MCP_ALLOWED_TEAMS` | (unset) | Comma-separated Heroku team allowlist. |
+| `MCP_ALLOWED_EMAILS` | (unset = anyone) | Comma-separated allowlist. Users in this list also skip the OAuth consent screen (D2). |
+| `MCP_ALLOWED_TEAMS` | (unset) | Comma-separated Heroku team allowlist. Members also skip the OAuth consent screen. |
 | `MCP_ADMIN_EMAILS` | (unset) | Comma-separated admin allowlist (gates /admin/*). |
 | `HEROKUMCP_AUDIT_RETENTION_DAYS` | (unset = forever) | Daily cron prunes older audit rows. |
 | `HEROKUMCP_LOG_LEVEL` | `info` | One of `debug`, `info`, `warn`, `error`. |
 | `HEROKUMCP_DB_SSL` | `require` | `require` / `no-verify` / `off`. |
 
-## Connecting Claude Desktop
+## Connecting clients
 
-Copy this into `~/Library/Application Support/Claude/claude_desktop_config.json`
-(macOS) or the equivalent on your platform:
+### Claude Desktop (OAuth Custom Connector — recommended)
+
+1. *Settings → Connectors → Add custom connector*.
+2. Paste your `/mcp` URL (e.g. `https://your-server.example/mcp`).
+3. Click *Connect*. Claude Desktop will open a browser tab, walk the OAuth
+   2.1 flow (Dynamic Client Registration → Heroku sign-in → consent or
+   auto-allow → code exchange), and store the resulting access/refresh
+   token pair internally.
+4. Verify the connection on `/me` — it appears under **Connected
+   applications**. Revoke from there at any time.
+
+Behind the scenes the server implements:
+
+| Endpoint | RFC | Purpose |
+|---|---|---|
+| `GET /.well-known/oauth-authorization-server` | RFC 8414 | Discovery |
+| `GET /.well-known/oauth-protected-resource` | RFC 9728 | `/mcp` → AS pointer |
+| `POST /oauth/register` | RFC 7591 | Dynamic Client Registration |
+| `GET /oauth/authorize` | RFC 6749 + PKCE S256 | Auth code grant |
+| `POST /oauth/token` | RFC 6749 | code / refresh_token grants |
+| `POST /oauth/revoke` | RFC 7009 | Token revocation |
+
+Access tokens are `hmcp_…` (1 h TTL). Refresh tokens are `hmcprt_…` (90 d
+TTL, rotated on each use).
+
+### Claude Code / MCP Inspector / curl (bearer)
+
+```bash
+claude mcp add --transport http \
+  --header "Authorization: Bearer hmcp_..." \
+  heroku-platform https://your-server.example/mcp
+```
+
+Or paste into `~/Library/Application Support/Claude/claude_desktop_config.json`
+(macOS) for an older Claude Desktop that doesn't have Custom Connector
+support yet:
 
 ```json
 {
   "mcpServers": {
     "heroku-platform": {
-      "url": "http://localhost:3000/mcp",
+      "url": "https://your-server.example/mcp",
       "headers": {
         "Authorization": "Bearer hmcp_..."
       }
@@ -87,8 +138,17 @@ Copy this into `~/Library/Application Support/Claude/claude_desktop_config.json`
 }
 ```
 
-The `/me` page renders a ready-to-paste version with your token already
-embedded.
+The `/me` page's *Advanced: bearer token* section renders a ready-to-paste
+version with your token already embedded.
+
+## `/me` page
+
+After sign-in, `/me` shows:
+
+- **Connected applications** (primary) — OAuth-DCR clients linked to you,
+  with Connected/Last-active timestamps and per-client *Revoke* buttons.
+- **Advanced: bearer token** (collapsed) — your long-lived `hmcp_…` tokens
+  for non-OAuth clients, plus a *Revoke all bearer tokens* button.
 
 ## Admin UI
 
@@ -104,15 +164,20 @@ Non-admins get 404 on these paths — they don't even discover the URLs exist.
 
 ## Architecture in one paragraph
 
-Hono on `@hono/node-server`. One Postgres pool, three repositories (users,
-heroku_tokens, connection_tokens) plus an audit_log table. Master KEK loaded
-once at boot; per-user DEK generated on first sign-in and wrapped under the
-KEK. Heroku OAuth access/refresh tokens encrypted with the DEK. Connection
-tokens hashed (never stored plaintext). Web sessions and OAuth-flow state both
-live in self-contained encrypted cookies (no `web_sessions` table). MCP
+Hono on `@hono/node-server`. One Postgres pool, six repositories (users,
+heroku_tokens, connection_tokens, oauth_clients, oauth_authorizations,
+oauth_tokens) plus an audit_log table. Master KEK loaded once at boot;
+per-user DEK generated on first sign-in and wrapped under the KEK. Heroku
+OAuth access/refresh tokens encrypted with the DEK. Connection and
+OAuth-issued tokens hashed (never stored plaintext). Web sessions and
+OAuth-flow state both live in self-contained encrypted cookies. MCP
 transport: per-session `StreamableHTTPServerTransport` over a fresh
 `McpServer` per Mcp-Session-Id, with the audit-wrapper installed at
-construction time so every tool call writes one audit row.
+construction time so every tool call writes one audit row. The `/mcp`
+middleware tries `oauth_tokens` first, falls back to `connection_tokens`,
+and emits a `WWW-Authenticate: Bearer resource_metadata=…` header on 401
+so OAuth-aware clients (Claude Desktop) can discover the auth server.
 
-See `notes/divergences.md` (entries #45–#54) for the design decisions that
-diverged from the original docs.
+See `PHASE-4.5.md` for the OAuth provider layer design, and
+`notes/divergences.md` for the decisions that diverged from the original
+docs.
