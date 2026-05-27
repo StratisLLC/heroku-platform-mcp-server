@@ -20,3 +20,4 @@ export * from './probes.js';
 export * from './prober.js';
 export * from './confirm.js';
 export * from './dry-run.js';
+export * from './crypto.js';

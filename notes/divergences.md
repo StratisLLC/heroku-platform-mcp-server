@@ -313,3 +313,76 @@ Total tools shipped to date: **240** (152 from Phase 1 + 2a + 2b, plus 88 Phase 
 Tools that previously had no pre-fetch but needed one for this fix gained one: `apps_disable_acm`, `dynos_restart`, `dynos_restart_all`, `dynos_stop`, `releases_rollback`, `builds_delete_cache`, `log_drains_delete` (switched from drain-prefetch to app-prefetch since confirm is on the app name), `app_webhooks_delete` (same switch), `app_transfers_update`, `team_apps_transfer`, `review_apps_config_delete`, `oauth_authorizations_regenerate`.
 
 **Doc impact:** PHASE-2a.md (Decision 1) and PHASE-2b.md (Decisions 3 & 4) carry post-fix notes pointing to this entry.
+
+---
+
+# Phase 4 divergences
+
+## 45. Phase 4 — buildServer accepts a thunk-style token + a `beforeRegisterTools` hook
+
+**Observation:** Phase 4 needs to (a) refresh the user's Heroku access token mid-session and (b) wrap `registerTool` with audit/replacement logic before the platform-mcp tool surface lands on the server. `BuildServerOptions.token` is now `string | (() => Promise<string> | string)`, and a new optional `beforeRegisterTools(server, ctx)` hook fires after the `McpServer` is constructed but before any tool is registered. Both knobs are opt-in; stdio mode continues to pass a plain string token and a no-hook configuration.
+
+**Doc impact:** ARCHITECTURE.md §7 covers the per-request lifecycle generically; no changes needed unless we want to call out the per-session-McpServer pattern explicitly.
+
+## 46. Phase 4 — `@heroku-mcp/platform` ships both stdio binary and library bundle
+
+**Observation:** The package previously emitted only `dist/index-stdio.js`. Phase 4 added `dist/index.js` as a library entrypoint so `@heroku-mcp/http-server` can `import { buildServer, registerAllTools, ToolContext } from '@heroku-mcp/platform'`. `package.json` keeps the same `bin: herokumcp-platform`; the new library bundle exposes the wiring without the CLI shebang. tsup config runs two builds — one for each entry — so the library bundle has no `#!/usr/bin/env node` prefix.
+
+## 47. Phase 4 — buffered `dynos_run` substitutes the Phase-2a stub via `beforeRegisterTools`
+
+**Observation:** Per DECISION 8, the Phase 4 HTTP server ships `dynos_run` as a buffered tool that POSTs `attach: true, type: 'run'`, opens the WebSocket from `attach_url`, and reads until close / `max_duration_seconds` / `max_output_bytes`. Rather than fork platform-mcp's `registerFormationWriteTools`, the http-server installs an interceptor in `beforeRegisterTools` that drops the platform-mcp registration call for `dynos_run` on the floor; the audit-wrapped `registerTool` is then re-applied and the buffered tool is registered. The interactive case is explicitly out of scope — the tool description tells the user to use `heroku run` locally for interactive sessions.
+
+## 48. Phase 4 — connection token format `hmcp_` + 43 chars base64url (32 random bytes)
+
+**Observation:** 32-byte random body produces 43 base64url chars without padding (RFC 4648 §5). The total token length is 48 chars including the prefix.
+
+## 49. Phase 4 — encrypted cookie sessions replace the database-backed `web_sessions` table
+
+**Observation:** AUTH.md §"Token storage — envelope encryption" sketched a `web_sessions` Postgres table for the OAuth-flow state and the web session. Phase 4 instead uses self-contained encrypted cookies for both:
+
+- `hmcp_oauth_flow` carries `{state, pkceVerifier, redirectAfterLogin, createdAt}` between `/sign-in` and `/oauth/callback`; 5-minute TTL; SameSite=Lax in production.
+- `hmcp_session` carries `{userId, signedInAt}`; 30-day TTL; SameSite=Lax.
+
+Both are AES-256-GCM-sealed under the master KEK (no separate `MCP_SESSION_SECRET`). Trade-off: signed cookies can't be revoked server-side mid-TTL — but the MCP layer doesn't depend on the web session, so the consequence of a leaked session cookie is at most read access to /me/ /audit/ /admin/ pages. The signed-in user's actual MCP credential is the separately-revocable connection token.
+
+The `web_sessions` table is therefore not created. AUTH.md should be updated when convenient; the cookie-based design is captured here.
+
+**Doc impact:** AUTH.md §"Web layer" mentions the `web_sessions` table; the actual schema (migration 0001) does not. Worth a small follow-up.
+
+## 50. Phase 4 — admin pages return 404 (not 403) for non-admins
+
+**Observation:** DECISION 9 calls this out explicitly: admin pages MUST 404 when the caller is not in `MCP_ADMIN_EMAILS`, so the existence of the admin UI is not disclosed. The `requireAdmin()` middleware enforces this. Tested in `test/routes/admin.test.ts`.
+
+## 51. Phase 4 — audit log details column carries a stable per-event-name schema
+
+**Observation:** `audit_log.details` is jsonb (flexible by design), but per-event-name the schema is consistent so /audit and /admin/audit can render uniformly without per-event special cases:
+
+- `tool_call`: `{args: <sanitized>, dry_run: boolean, confirm_present: boolean}` (plus `error: <message>` when status=error)
+- `auth/sign_in`: `{email, herokuId}`
+- `auth/sign_out`: (empty)
+- `auth/token_issued`: `{label}`
+- `auth/token_revoked`: `{token_id}`
+- `auth/revoke_all_tokens`: `{revoked_count}`
+- `auth/admin_revoke_all_tokens`: `{revoked_count, actor_email}`
+- `auth/admin_revoke_token`: `{token_id, actor_email}`
+- `auth/access_denied`: `{reason, email, herokuId}`
+- `system/mcp_session_start`: `{connection_token_id}`
+- `system/unhandled_error`: `{path, method, message}`
+
+Sanitization runs args through `@heroku-mcp/core/redact`; the literal `confirm` value is dropped entirely (we record only whether it was present). The audit wrapper never logs Heroku access/refresh tokens, master key material, cookie values, or natural-language prompts — we don't observe them.
+
+## 52. Phase 4 — `HEROKUMCP_MASTER_KEY` is base64 (not hex) and 32 bytes
+
+**Observation:** DEPLOYMENT.md examples show `openssl rand -hex 32`. Phase 4 uses base64 instead: `openssl rand -base64 32` produces a 44-character key (32 bytes encoded). The decoder enforces exactly 32 bytes and emits a clear error otherwise. Hex would also work cryptographically; base64 was picked because every Heroku Postgres / Heroku config var documentation example uses base64 for the same kind of key material.
+
+## 53. Phase 4 — TestContainers vs pre-provisioned DB for integration tests
+
+**Observation:** The `e2e.integration.test.ts` file is gated on `HEROKUMCP_TEST_DATABASE_URL`. We deliberately did NOT pull in `testcontainers-node` because: (a) it requires Docker on the developer machine, which isn't a hard requirement for the rest of the codebase; (b) the docker-shaped container startup is slow enough (~3-5 sec) that it eats into the unit-test feedback loop; (c) operators reading the test code wouldn't be able to run it without sidecar Docker setup. The fallback path (`HEROKUMCP_TEST_DATABASE_URL` env var) is the documented "how to run integration tests locally" approach. CI can either provide Docker + use a `services: postgres` block in GitHub Actions, or point the env var at a managed Heroku Postgres.
+
+## 54. Phase 4 — final package + tool count
+
+**Packages**: 4 (core, platform-mcp, http-server [new], admin-cli [new]).
+
+**Tool count unchanged**: 240 tools, all exposed via the HTTP endpoint with the buffered `dynos_run` substituted for the Phase-2a stub.
+
+**New tests**: 151 across core (20 crypto), http-server (122), admin-cli (9). Plus 3 e2e integration tests gated on `HEROKUMCP_TEST_DATABASE_URL`. Workspace total: 634 passing + 3 skipped.

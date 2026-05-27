@@ -105,7 +105,9 @@ export async function spinUpServer(
   const scratchDir = await mkdtemp(join(tmpdir(), 'herokumcp-platform-'));
   const paths = resolvePaths({ home: scratchDir, platform: 'linux' });
   const token = overrides.token ?? 'HRKU-test-token';
-  const fp = fingerprintToken(token);
+  // Tests always pass strings here; the function-token variant is for the
+  // HTTP server's per-session boot.
+  const fp = fingerprintToken(typeof token === 'string' ? token : 'fn-token');
 
   // Pre-seed the capability cache to avoid live probing.
   await writeCapabilityFile(

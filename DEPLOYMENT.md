@@ -364,3 +364,56 @@ Things the README and operator-runbook should make explicit:
 4. **There is no `MCP_ADMIN_*` user.** Operations like rotation and revocation use the admin script, which runs as the Heroku app user via `heroku run`. Anyone with `heroku run` access on the app can run admin commands. Audit `heroku access` on the app.
 5. **Logs may contain sensitive metadata.** Audit log entries include user email, tool name, target resource name. They never contain config values, tokens, or response bodies. Still: Heroku log drains to a third-party service should be considered when scoping data residency.
 6. **Account deletion is hidden by default.** `ALLOW_ACCOUNT_DELETION=false` means tools like `account_delete` and `keys_delete` are not advertised. Only enable if you really want those tools available and trust every email in your allowlist.
+
+---
+
+## Phase 4 implementation reality (corrections to the above)
+
+The original DEPLOYMENT.md predated the Phase 4 build. The shipped HTTP
+server matches the spirit of the operator runbook above but differs in
+several names and a few mechanisms. The list below supersedes the
+corresponding parts of this doc; the long-form prose above stays for context.
+
+**Env var names.** The shipped code reads:
+
+| Old name in doc | Shipped name |
+|---|---|
+| `MCP_ENCRYPTION_KEY` | `HEROKUMCP_MASTER_KEY` (base64 32B; `openssl rand -base64 32`) |
+| `MCP_OAUTH_SCOPE` | `HEROKUMCP_OAUTH_SCOPE` (default `write-protected`) |
+| `MCP_SESSION_SECRET` | (not used — session cookies use the master key directly) |
+| `MCP_CONNECTION_TOKEN_TTL_DAYS` | (not used — connection tokens have no expiry; revoke via the UI) |
+| `MCP_OPERATOR_CONTACT` | `HEROKUMCP_ADMIN_CONTACT` (REQUIRED) |
+| `ALLOW_ACCOUNT_DELETION` | (n/a — `account_delete` is not implemented at all; see notes/divergences.md #18) |
+
+The names that did NOT change: `DATABASE_URL`, `MCP_ALLOWED_EMAILS`,
+`MCP_ALLOWED_TEAMS`, `MCP_ADMIN_EMAILS` (new), `LOG_LEVEL`
+(renamed `HEROKUMCP_LOG_LEVEL`).
+
+**OAuth client setup.** `heroku clients:create` still applies; the redirect
+URI is `https://<app>/oauth/callback` (the path is `/oauth/callback`, not
+`/auth/heroku/callback`).
+
+**Admin CLI.** The runbook above describes
+`node dist/scripts/admin.js revoke-user`. The shipped CLI is
+`@heroku-mcp/admin-cli` invoked as `herokumcp-admin`. Equivalent commands:
+
+| Doc command | Shipped command |
+|---|---|
+| `admin.js revoke-user --email X` | `herokumcp-admin users revoke-all-tokens --email X` |
+| `admin.js audit-tail --limit N --since D` | `herokumcp-admin audit tail --limit N --since D` |
+| `admin.js rekey` | (deferred to Phase 10; `herokumcp-admin keys rotate-master` is a stub) |
+| `admin.js clear-all-tokens` | (manual SQL: `DELETE FROM heroku_tokens`) |
+
+**Sessions and OAuth flow state.** The runbook above assumes a
+`web_sessions` table. The shipped code uses encrypted cookies sealed under
+the master key instead, so there is no `web_sessions` row to inspect. The
+trade-off is documented in `notes/divergences.md` #49.
+
+**dynos_run.** Shipped in buffered mode in the HTTP server (DECISION 8).
+Reads the rendezvous WebSocket until close, a configurable duration limit, or
+a configurable output byte limit — whichever hits first. Interactive sessions
+still need `heroku run` from a local terminal.
+
+**Audit retention.** Phase 4 adds `HEROKUMCP_AUDIT_RETENTION_DAYS` (default
+unset = keep forever). When set, a daily prune runs in-process. The CLI
+`audit prune --before <iso>` is the manual fallback.

@@ -26,8 +26,9 @@ import { registerAllTools, type RegistrationSummary } from './tools/index.js';
 /** Inputs to {@link buildServer}. Only `token` is required at runtime; tests
  *  inject everything else. */
 export interface BuildServerOptions {
-  /** Bearer token to send on Heroku requests. */
-  token: string;
+  /** Bearer token to send on Heroku requests. May be a string (static) or a
+   *  thunk that returns the current token (HTTP server with refresh). */
+  token: string | (() => Promise<string> | string);
   /** Override resolved paths (tests). */
   paths?: ResolvedPaths;
   /** Override the HTTP fetch (tests). */
@@ -36,6 +37,19 @@ export interface BuildServerOptions {
   version?: string;
   /** Force a refresh of the capability cache at startup. */
   forceProbe?: boolean;
+  /** Optional hook fired after the McpServer is constructed but BEFORE any
+   *  tool is registered. Lets callers wrap `server.registerTool` with
+   *  observability/audit logic or substitute tool handlers. */
+  beforeRegisterTools?: (server: McpServer, ctx: ToolContext) => void;
+  /** Override the server name reported in `serverInfo`. Defaults to
+   *  `"herokumcp-platform"`. */
+  serverName?: string;
+  /** Override the User-Agent suffix in parentheses. Defaults to `"platform"`. */
+  userAgentSuffix?: string;
+  /** Override the token fingerprint used in audit lines. Defaults to
+   *  SHA-256(token)[:16]. Pass an explicit value when the token is opaque to
+   *  the caller (e.g. HTTP server: the connection token id). */
+  tokenFingerprint?: string;
 }
 
 /** Whatever the entrypoint needs to plug a transport into. */
@@ -54,8 +68,16 @@ export async function buildServer(opts: BuildServerOptions): Promise<BuiltServer
   const paths = opts.paths ?? resolvePaths();
   await mkdir(paths.home, { recursive: true });
   const version = opts.version ?? '0.0.0';
-  const userAgent = `herokumcp/${version} (platform)`;
-  const tokenFingerprint = fingerprintToken(opts.token);
+  const serverName = opts.serverName ?? PACKAGE_NAME;
+  const userAgentSuffix = opts.userAgentSuffix ?? 'platform';
+  const userAgent = `herokumcp/${version} (${userAgentSuffix})`;
+
+  const tokenProvider: () => Promise<string> | string =
+    typeof opts.token === 'function' ? opts.token : () => opts.token as string;
+
+  // For probing we need a sync-or-async token; we resolve it once at startup.
+  const initialToken = await Promise.resolve(tokenProvider());
+  const tokenFingerprint = opts.tokenFingerprint ?? fingerprintToken(initialToken);
 
   // Core primitives.
   const etagCache = new ETagCache();
@@ -64,7 +86,7 @@ export async function buildServer(opts: BuildServerOptions): Promise<BuiltServer
   const schema = new SchemaCache({ path: paths.schemaCachePath });
 
   const client: HerokuClient = createClient({
-    token: () => opts.token,
+    token: tokenProvider,
     tokenFingerprint,
     server: 'platform',
     userAgent,
@@ -76,7 +98,7 @@ export async function buildServer(opts: BuildServerOptions): Promise<BuiltServer
 
   // Capability probing.
   const probeOptions = {
-    token: opts.token,
+    token: initialToken,
     userAgent,
     ...(opts.fetch ? { fetch: opts.fetch } : {}),
   };
@@ -114,9 +136,13 @@ export async function buildServer(opts: BuildServerOptions): Promise<BuiltServer
   };
 
   const server = new McpServer(
-    { name: PACKAGE_NAME, version },
+    { name: serverName, version },
     { capabilities: { tools: { listChanged: true } } },
   );
+
+  if (opts.beforeRegisterTools) {
+    opts.beforeRegisterTools(server, context);
+  }
 
   const registration = registerAllTools(server, context);
   return { server, context, registration, capabilities };

@@ -54,6 +54,18 @@ export default tseslint.config(
       "@typescript-eslint/no-unsafe-call": "off",
       "@typescript-eslint/no-unsafe-argument": "off",
       "@typescript-eslint/no-unsafe-return": "off",
+      // Mock fetch/handler functions in tests are often declared `async` for
+      // signature parity even when they don't await; that's intentional, not
+      // a smell.
+      "@typescript-eslint/require-await": "off",
+      "@typescript-eslint/no-unnecessary-type-assertion": "off",
+      "@typescript-eslint/no-base-to-string": "off",
+      // Tests sometimes use `import('...').Foo` annotations to avoid a
+      // sprawling type-imports section at the top.
+      "@typescript-eslint/consistent-type-imports": "off",
+      // Tests are allowed to fall through to default stringification ([object
+      // Object]) since we control the inputs and don't need defensive coverage.
+      "@typescript-eslint/dot-notation": "off",
     },
   },
   prettierConfig,

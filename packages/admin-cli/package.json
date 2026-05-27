@@ -1,19 +1,12 @@
 {
-  "name": "@heroku-mcp/platform",
+  "name": "@heroku-mcp/admin-cli",
   "version": "0.0.0",
-  "description": "Customer-facing Heroku Platform MCP server (stdio). Phase 1: account + apps tiers, read-only.",
+  "description": "Operator CLI for the hosted Heroku MCP server: users, tokens, audit, status, migrations.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
-  },
   "bin": {
-    "herokumcp-platform": "./dist/index-stdio.js"
+    "herokumcp-admin": "./dist/bin.js"
   },
   "files": [
     "dist",
@@ -27,18 +20,20 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:integration": "VITEST_INTEGRATION=1 vitest run test/integration",
+    "test:integration": "echo no-integration-tests-for-admin-cli && exit 0",
     "lint": "eslint src test",
     "format": "prettier --write src test",
     "format:check": "prettier --check src test"
   },
   "dependencies": {
     "@heroku-mcp/core": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "zod": "^3.25.0"
+    "@heroku-mcp/http-server": "workspace:*",
+    "pg": "^8.13.1",
+    "commander": "^12.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
     "tsup": "^8.3.5",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
