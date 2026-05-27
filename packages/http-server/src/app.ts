@@ -43,6 +43,7 @@ import { buildMcpRoutes } from './routes/mcp.js';
 import { buildWellKnownRoutes } from './routes/wellknown.js';
 import { buildDcrRoutes } from './oauth-provider/dcr.js';
 import { buildAuthorizeRoutes } from './oauth-provider/authorize.js';
+import { buildTokenRoutes } from './oauth-provider/token.js';
 import type { TransportManager } from './mcp/transport.js';
 import type { WebSocketFactory } from './mcp/dynos-run.js';
 
@@ -105,6 +106,7 @@ export function buildApp(opts: BuildAppOptions): BuiltApp {
       oauthCfg: opts.oauthCfg,
     }),
   );
+  app.route('/', buildTokenRoutes({ pool: opts.pool }));
 
   // Public routes (landing, sign-in, callback, sign-out). Reads `auth` from
   // context but doesn't gate on it.
