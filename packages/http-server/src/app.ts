@@ -44,6 +44,7 @@ import { buildWellKnownRoutes } from './routes/wellknown.js';
 import { buildDcrRoutes } from './oauth-provider/dcr.js';
 import { buildAuthorizeRoutes } from './oauth-provider/authorize.js';
 import { buildTokenRoutes } from './oauth-provider/token.js';
+import { buildRevokeRoutes } from './oauth-provider/revoke.js';
 import type { TransportManager } from './mcp/transport.js';
 import type { WebSocketFactory } from './mcp/dynos-run.js';
 
@@ -107,6 +108,7 @@ export function buildApp(opts: BuildAppOptions): BuiltApp {
     }),
   );
   app.route('/', buildTokenRoutes({ pool: opts.pool }));
+  app.route('/', buildRevokeRoutes({ pool: opts.pool }));
 
   // Public routes (landing, sign-in, callback, sign-out). Reads `auth` from
   // context but doesn't gate on it.
