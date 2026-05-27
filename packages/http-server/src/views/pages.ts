@@ -154,6 +154,8 @@ export function renderMe(ctx: ViewerCtx, v: MePageView): string {
       `
     : null;
 
+  const clients = v.clients ?? [];
+
   return layout(
     {
       title: 'My account',
@@ -171,23 +173,43 @@ export function renderMe(ctx: ViewerCtx, v: MePageView): string {
           <dt>Default team</dt><dd>${v.user.defaultTeam ?? html`<em>none</em>`}</dd>
           <dt>Signed in</dt><dd>${v.user.signedInAt.toISOString()}</dd>
         </dl>
+      </div>
+      <div class="card">
+        <h2>Connected applications</h2>
+        <p class="muted">
+          Apps connected via OAuth — for example, Claude Desktop's Custom Connector. Each
+          connection is per-client; revoking only affects that client.
+        </p>
+        <p class="muted" style="margin-top:6px">
+          To connect a new app: in Claude Desktop go to Settings → Connectors → Add custom
+          connector and paste <code>${baseUrl.replace(/\/$/, '')}/mcp</code>.
+        </p>
+        ${clients.length === 0
+          ? html`<p class="muted">No connected applications yet.</p>`
+          : renderClientTable(clients)}
+      </div>
+      <details class="card" ${v.tokens.length > 0 || v.newToken ? 'open' : ''}>
+        <summary>
+          <strong>Advanced: bearer token for Claude Code, MCP Inspector, curl</strong>
+        </summary>
+        <p class="muted" style="margin-top:10px">
+          A long-lived <code>hmcp_</code> token you can paste into clients that take a custom
+          <code>Authorization</code> header. Most users on Claude Desktop should use the
+          Connected Applications section above instead.
+        </p>
+        <h3 style="font-size:14px;margin-top:14px">Active connection tokens</h3>
+        ${v.tokens.length === 0
+          ? html`<p class="muted">No active tokens.</p>`
+          : renderTokenTable(v.tokens, '/me/tokens')}
         <p style="margin-top:18px">
           <form class="inline" method="post" action="/me/sign-out-everywhere">
             <button class="btn btn-danger" type="submit"
-              onclick="return confirm('Revoke ALL of your connection tokens? Every Claude client you use will need a new token.')">
-              Sign out everywhere (revoke all tokens)
+              onclick="return confirm('Revoke ALL of your bearer connection tokens? Any Claude Code / MCP Inspector / curl session using a hmcp_ token will need a new one. OAuth-issued tokens for Connected Applications are not affected.')">
+              Revoke all bearer tokens
             </button>
           </form>
         </p>
-      </div>
-      <div class="card">
-        <h2>Active connection tokens</h2>
-        ${
-          v.tokens.length === 0
-            ? html`<p class="muted">No active tokens.</p>`
-            : renderTokenTable(v.tokens, '/me/tokens')
-        }
-      </div>
+      </details>
     `,
   );
 }
@@ -557,6 +579,48 @@ export function renderSimpleError(ctx: ViewerCtx, title: string, body: string): 
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
+
+function renderClientTable(rows: OAuthClientRow[]): SafeHtml {
+  return html`
+    <table>
+      <thead>
+        <tr>
+          <th>Application</th>
+          <th>Connected</th>
+          <th>Last active</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(
+          (c) => html`
+            <tr>
+              <td>
+                <strong>${c.clientName ?? html`<em>unnamed client</em>`}</strong>
+                <div class="muted" style="font-size:12px">
+                  <code>${c.clientId.slice(0, 12)}…</code>
+                </div>
+              </td>
+              <td>${c.createdAt.toISOString()}</td>
+              <td>${c.lastUsedAt ? c.lastUsedAt.toISOString() : html`<em>never</em>`}</td>
+              <td>
+                <form class="inline" method="post" action="/me/clients/${c.clientId}/revoke">
+                  <button
+                    class="btn btn-small btn-danger"
+                    type="submit"
+                    onclick="return confirm('Revoke ${c.clientName ?? 'this application'}? It will need to reconnect from scratch.')"
+                  >
+                    Revoke
+                  </button>
+                </form>
+              </td>
+            </tr>
+          `,
+        )}
+      </tbody>
+    </table>
+  `;
+}
 
 function renderTokenTable(rows: ConnectionTokenRow[], _basePath: string): SafeHtml {
   return html`

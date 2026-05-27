@@ -24,7 +24,11 @@ describe('/me', () => {
     expect(res.status).toBe(200);
     const body = await res.text();
     expect(body).toContain('alice@example.com');
-    expect(body).toContain('Sign out everywhere');
+    // After Phase 4.5 the bearer-token panel is collapsed under <details>;
+    // the form still POSTs to /me/sign-out-everywhere with a clearer label.
+    expect(body).toContain('Revoke all bearer tokens');
+    expect(body).toContain('action="/me/sign-out-everywhere"');
+    expect(body).toContain('Connected applications');
   });
 });
 
