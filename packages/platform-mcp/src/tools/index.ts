@@ -13,16 +13,24 @@ import { isDiagnosticOnly, tierAvailable } from '../capabilities.js';
 import type { ToolContext } from '../context.js';
 import { registerAccountTools } from './account.js';
 import { registerAccountWriteTools } from './account-writes.js';
+import { registerAddonsTools } from './addons.js';
+import { registerAddonsWriteTools } from './addons-writes.js';
 import { registerAppsTools } from './apps.js';
 import { registerAppsWriteTools } from './apps-writes.js';
 import { registerCollabWriteTools } from './collab-writes.js';
 import { registerConfigWriteTools } from './config-writes.js';
 import { registerDiagnosticTools } from './diagnostics.js';
 import { registerDomainsWriteTools } from './domains-writes.js';
+import { registerEnterpriseTools } from './enterprise.js';
+import { registerEnterpriseWriteTools } from './enterprise-writes.js';
 import { registerFormationWriteTools } from './formation-writes.js';
 import { registerLogsWriteTools } from './logs-writes.js';
+import { registerPipelinesTools } from './pipelines.js';
+import { registerPipelinesWriteTools } from './pipelines-writes.js';
 import { registerReleasesWriteTools } from './releases-writes.js';
 import { registerReviewAppsWriteTools } from './review-apps-writes.js';
+import { registerSpacesTools } from './spaces.js';
+import { registerSpacesWriteTools } from './spaces-writes.js';
 import { registerTeamsTools } from './teams.js';
 import { registerTeamsWriteTools } from './teams-writes.js';
 import { registerWebhooksWriteTools } from './webhooks-writes.js';
@@ -41,6 +49,14 @@ export function registerAllTools(server: McpServer, ctx: ToolContext): Registrat
     appsWrites: false,
     teams: false,
     teamsWrites: false,
+    enterprise: false,
+    enterpriseWrites: false,
+    spaces: false,
+    spacesWrites: false,
+    addons: false,
+    addonsWrites: false,
+    pipelines: false,
+    pipelinesWrites: false,
     diagnosticOnly: isDiagnosticOnly(capabilities),
   };
 
@@ -82,6 +98,31 @@ export function registerAllTools(server: McpServer, ctx: ToolContext): Registrat
     summary.teams = true;
     summary.teamsWrites = true;
   }
+  // Phase 3 — enterprise / spaces / addons_consumer / pipelines tiers.
+  if (tierAvailable(capabilities, 'enterprise')) {
+    registerEnterpriseTools(server, ctx);
+    registerEnterpriseWriteTools(server, ctx);
+    summary.enterprise = true;
+    summary.enterpriseWrites = true;
+  }
+  if (tierAvailable(capabilities, 'spaces')) {
+    registerSpacesTools(server, ctx);
+    registerSpacesWriteTools(server, ctx);
+    summary.spaces = true;
+    summary.spacesWrites = true;
+  }
+  if (tierAvailable(capabilities, 'addons_consumer')) {
+    registerAddonsTools(server, ctx);
+    registerAddonsWriteTools(server, ctx);
+    summary.addons = true;
+    summary.addonsWrites = true;
+  }
+  if (tierAvailable(capabilities, 'pipelines')) {
+    registerPipelinesTools(server, ctx);
+    registerPipelinesWriteTools(server, ctx);
+    summary.pipelines = true;
+    summary.pipelinesWrites = true;
+  }
   return summary;
 }
 
@@ -97,6 +138,22 @@ export interface RegistrationSummary {
   teams: boolean;
   /** True iff Phase 2b teams-tier write tools were registered. */
   teamsWrites: boolean;
+  /** True iff Phase 3 enterprise-tier read tools were registered. */
+  enterprise: boolean;
+  /** True iff Phase 3 enterprise-tier write tools were registered. */
+  enterpriseWrites: boolean;
+  /** True iff Phase 3 spaces-tier read tools were registered. */
+  spaces: boolean;
+  /** True iff Phase 3 spaces-tier write tools were registered. */
+  spacesWrites: boolean;
+  /** True iff Phase 3 add-ons-tier read tools were registered. */
+  addons: boolean;
+  /** True iff Phase 3 add-ons-tier write tools were registered. */
+  addonsWrites: boolean;
+  /** True iff Phase 3 pipelines-tier read tools were registered. */
+  pipelines: boolean;
+  /** True iff Phase 3 pipelines-tier write tools were registered. */
+  pipelinesWrites: boolean;
   /** True iff the account tier reported delinquent or suspended — only
    *  diagnostic tools were registered. */
   diagnosticOnly: boolean;

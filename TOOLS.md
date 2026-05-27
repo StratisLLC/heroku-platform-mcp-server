@@ -278,117 +278,138 @@ The per-tool expected `confirm` value is documented in the Params column where t
 
 ## Tier: `enterprise`
 
+> Phase 3 tools below. Tool names use the canonical Phase 3 form (e.g. `enterprise_accounts_info` rather than the earlier draft `enterprise_account_info`) — see notes/divergences.md #35. Identity-provider and audit-trail tools remain deferred to a future phase.
+
 | Tool | Wraps | Params |
 |---|---|---|
-| `enterprise_accounts_list` 📄 | `GET /enterprise-accounts` | — |
-| `enterprise_account_info` | `GET /enterprise-accounts/{id_or_name}` | `enterprise` |
-| `enterprise_account_update` 🧪 | `PATCH /enterprise-accounts/{id_or_name}` | `enterprise`, fields |
-| `enterprise_members_list` 📄 | `GET /enterprise-accounts/{id_or_name}/members` | `enterprise` |
-| `enterprise_members_create` 🧪 | `POST /enterprise-accounts/{id_or_name}/members` | `enterprise`, `email`, `permissions[]`, `federated?` |
-| `enterprise_members_update` 🧪 | `PATCH /enterprise-accounts/{id_or_name}/members/{user}` | `enterprise`, `user`, `permissions[]` |
-| `enterprise_members_delete` ⚠ | `DELETE /enterprise-accounts/{id_or_name}/members/{user}` | `enterprise`, `user`, `confirm: <email>` |
-| `enterprise_daily_usage` | `GET /enterprise-accounts/{id_or_name}/usage/daily` | `enterprise`, `start`, `end` |
-| `enterprise_monthly_usage` | `GET /enterprise-accounts/{id_or_name}/usage/monthly` | `enterprise`, `start`, `end` |
-| `permission_entities_list` 📄 | `GET /enterprise-accounts/{id_or_name}/permissions` | `enterprise` |
-| `identity_providers_list` 📄 | `GET /enterprise-accounts/{id_or_name}/identity-providers` | `enterprise` |
-| `identity_providers_info` | `GET /enterprise-accounts/{id_or_name}/identity-providers/{id}` | `enterprise`, `provider` |
-| `identity_providers_create` 🧪 | `POST /enterprise-accounts/{id_or_name}/identity-providers` | `enterprise`, IdP fields |
-| `identity_providers_update` 🧪 | `PATCH /identity-providers/{id}` | `provider`, fields |
-| `identity_providers_delete` ⚠ | `DELETE /identity-providers/{id}` | `provider`, `confirm: <name>` |
-| `audit_trail_events_list` 📄 | `GET /enterprise-accounts/{id_or_name}/events` | `enterprise`, time range filters |
-| `audit_trail_archives_list` 📄 | `GET /enterprise-accounts/{id_or_name}/archives` | `enterprise` |
-| `audit_trail_archives_info` | `GET /enterprise-accounts/{id_or_name}/archives/{year}/{month}` | `enterprise`, `year`, `month` |
+| `enterprise_accounts_list` 📄 ✅ | `GET /enterprise-accounts` | — |
+| `enterprise_accounts_info` ✅ | `GET /enterprise-accounts/{id_or_name}` | `enterprise` |
+| `enterprise_accounts_update` 🧪 ✅ | `PATCH /enterprise-accounts/{id_or_name}` | `enterprise`, fields |
+| `enterprise_account_members_list` 📄 ✅ | `GET /enterprise-accounts/{id_or_name}/members` | `enterprise` |
+| `enterprise_account_members_create_or_update` 🧪 ✅ | `PUT /enterprise-accounts/{id_or_name}/members` | `enterprise`, `user`, `permissions[]`, `federated?` |
+| `enterprise_account_members_delete` ⚠ ✅ | `DELETE /enterprise-accounts/{id_or_name}/members/{user}` | `enterprise`, `user`, `confirm: <member email from prefetch>` |
+| `enterprise_account_member_apps_list` 📄 ✅ | `GET /enterprise-accounts/{id_or_name}/members/{user}/apps` | `enterprise`, `user` |
+| `enterprise_account_daily_usage` ✅ | `GET /enterprise-accounts/{id_or_name}/usage/daily` | `enterprise`, `start`, `end` |
+| `enterprise_account_monthly_usage` ✅ | `GET /enterprise-accounts/{id_or_name}/usage/monthly` | `enterprise`, `start`, `end` |
+| `enterprise_account_permissions_list` 📄 ✅ | `GET /enterprise-accounts/{id_or_name}/permissions` | `enterprise` |
+| `enterprise_account_addons_list` 📄 ✅ | `GET /enterprise-accounts/{id_or_name}/addons` | `enterprise` |
+| `enterprise_account_teams_list` 📄 ✅ | `GET /enterprise-accounts/{id_or_name}/teams` | `enterprise` |
+| `enterprise_account_teams_create` 🧪 ✅ | `POST /enterprise-accounts/{id_or_name}/teams` | `enterprise`, `name`, address fields |
+| `enterprise_account_teams_update` 🧪 ✅ | `PATCH /teams/{id_or_name}` | `team`, `name?`, `default?` |
+| `credit_pool_info` ✅ | `GET /enterprise-accounts/{id_or_name}/credit-pool` | `enterprise` (404 when plan does not expose) |
+| `identity_providers_list` 📄 | `GET /enterprise-accounts/{id_or_name}/identity-providers` | `enterprise` (deferred) |
+| `identity_providers_info` | `GET /enterprise-accounts/{id_or_name}/identity-providers/{id}` | `enterprise`, `provider` (deferred) |
+| `identity_providers_create` 🧪 | `POST /enterprise-accounts/{id_or_name}/identity-providers` | `enterprise`, IdP fields (deferred) |
+| `identity_providers_update` 🧪 | `PATCH /identity-providers/{id}` | `provider`, fields (deferred) |
+| `identity_providers_delete` ⚠ | `DELETE /identity-providers/{id}` | `provider`, `confirm: <name>` (deferred) |
+| `audit_trail_events_list` 📄 | `GET /enterprise-accounts/{id_or_name}/events` | `enterprise`, time range filters (deferred) |
+| `audit_trail_archives_list` 📄 | `GET /enterprise-accounts/{id_or_name}/archives` | `enterprise` (deferred) |
+| `audit_trail_archives_info` | `GET /enterprise-accounts/{id_or_name}/archives/{year}/{month}` | `enterprise`, `year`, `month` (deferred) |
 
 ## Tier: `spaces`
 
+> Phase 3 tools below. `spaces_destroy` (formerly `spaces_delete`), `vpn_connections_destroy` (formerly `_delete`), and `peerings_destroy` (formerly `_delete`) follow the canonical-name confirm pattern from prefetch. Decision 5: `spaces_create` REQUIRES `log_drain_url` when `shield: true` — see notes/divergences.md #37.
+
 | Tool | Wraps | Params |
 |---|---|---|
-| `spaces_list` 📄 | `GET /spaces` | — |
-| `spaces_info` | `GET /spaces/{id_or_name}` | `space` |
-| `spaces_create` 🧪 | `POST /spaces` | `name`, `team`, `region?`, `shield?`, `cidr?`, `data_cidr?` |
-| `spaces_update` 🧪 | `PATCH /spaces/{id_or_name}` | `space`, `name?` |
-| `spaces_delete` ⚠ | `DELETE /spaces/{id_or_name}` | `space`, `confirm: <name>` |
-| `space_access_list` 📄 | `GET /spaces/{id_or_name}/members` | `space` |
-| `space_access_info` | `GET /spaces/{id_or_name}/members/{user}` | `space`, `user` |
-| `space_access_update` 🧪 | `PATCH /spaces/{id_or_name}/members/{user}` | `space`, `user`, `permissions[]` |
-| `space_nat_info` | `GET /spaces/{id_or_name}/nat` | `space` |
-| `space_topology` | `GET /spaces/{id_or_name}/topology` | `space` |
-| `peerings_list` 📄 | `GET /spaces/{id_or_name}/peerings` | `space` |
-| `peerings_info` | `GET /spaces/{id_or_name}/peerings/{id}` | `space`, `peering` |
-| `peerings_create` 🧪 | `POST /spaces/{id_or_name}/peerings` | `space`, AWS account/VPC fields |
-| `peerings_delete` ⚠ | `DELETE /spaces/{id_or_name}/peerings/{id}` | `space`, `peering`, `confirm: <id>` |
-| `peering_info` | `GET /spaces/{id_or_name}/peering-info` | `space` |
-| `inbound_ruleset_current` | `GET /spaces/{id_or_name}/inbound-ruleset` | `space` |
-| `inbound_rulesets_list` 📄 | `GET /spaces/{id_or_name}/inbound-rulesets` | `space` |
-| `inbound_rulesets_info` | `GET /spaces/{id_or_name}/inbound-rulesets/{id}` | `space`, `ruleset` |
-| `inbound_rulesets_create` 🧪 | `PUT /spaces/{id_or_name}/inbound-ruleset` | `space`, `rules: [{action, source}]` |
-| `vpn_connections_list` 📄 | `GET /spaces/{id_or_name}/vpn-connections` | `space` |
-| `vpn_connections_info` | `GET /spaces/{id_or_name}/vpn-connections/{id}` | `space`, `vpn` |
-| `vpn_connections_create` 🧪 | `POST /spaces/{id_or_name}/vpn-connections` | `space`, `name`, `public_ip`, `routable_cidrs[]` |
-| `vpn_connections_delete` ⚠ | `DELETE /spaces/{id_or_name}/vpn-connections/{id}` | `space`, `vpn`, `confirm: <name>` |
-| `space_transfer_create` ⚠🧪 | `POST /spaces/{id_or_name}/transfer` | `space`, `new_owner`, `confirm: <name>` |
+| `spaces_list` 📄 ✅ | `GET /spaces` | — |
+| `spaces_info` ✅ | `GET /spaces/{id_or_name}` | `space` |
+| `spaces_create` 🧪 ✅ | `POST /spaces` | `name`, `team`, `region?`, `shield?`, `cidr?`, `data_cidr?`, `log_drain_url?` (**required when `shield: true`**) |
+| `spaces_update` 🧪 ✅ | `PATCH /spaces/{id_or_name}` | `space`, `name?` |
+| `spaces_destroy` ⚠ ✅ | `DELETE /spaces/{id_or_name}` | `space`, `confirm: <space name from prefetch>` |
+| `spaces_app_access_list` 📄 ✅ | `GET /spaces/{id_or_name}/members` | `space` |
+| `spaces_nat_info` ✅ | `GET /spaces/{id_or_name}/nat` | `space` |
+| `spaces_inbound_ruleset_current` ✅ | `GET /spaces/{id_or_name}/inbound-ruleset` | `space` |
+| `spaces_outbound_ruleset_current` ✅ | `GET /spaces/{id_or_name}/outbound-ruleset` | `space` |
+| `spaces_inbound_rulesets_list` 📄 ✅ | `GET /spaces/{id_or_name}/inbound-rulesets` | `space` |
+| `spaces_outbound_rulesets_list` 📄 ✅ | `GET /spaces/{id_or_name}/outbound-rulesets` | `space` |
+| `spaces_inbound_ruleset_create` 🧪 ✅ | `PUT /spaces/{id_or_name}/inbound-ruleset` | `space`, `rules: [{action, source}]` |
+| `spaces_outbound_ruleset_create` 🧪 ✅ | `PUT /spaces/{id_or_name}/outbound-ruleset` | `space`, `rules: [{action, source}]` |
+| `peerings_list` 📄 ✅ | `GET /spaces/{id_or_name}/peerings` | `space` |
+| `peerings_info` ✅ | `GET /spaces/{id_or_name}/peerings/{id}` | `space`, `peering` |
+| `peerings_create` 🧪 ✅ | `POST /spaces/{id_or_name}/peerings` | `space`, `pcx_id` |
+| `peerings_destroy` ⚠ ✅ | `DELETE /spaces/{id_or_name}/peerings/{id}` | `space`, `peering`, `confirm: <pcx_id from prefetch>` |
+| `vpn_connections_list` 📄 ✅ | `GET /spaces/{id_or_name}/vpn-connections` | `space` |
+| `vpn_connections_info` ✅ | `GET /spaces/{id_or_name}/vpn-connections/{id}` | `space`, `vpn` |
+| `vpn_connections_create` 🧪 ✅ | `POST /spaces/{id_or_name}/vpn-connections` | `space`, `name`, `public_ip`, `routable_cidrs[]` |
+| `vpn_connections_destroy` ⚠ ✅ | `DELETE /spaces/{id_or_name}/vpn-connections/{id}` | `space`, `vpn`, `confirm: <vpn name from prefetch>` |
+| `space_transfer_list` 📄 ✅ | `GET /space-transfers` | — |
+| `space_transfer_create` 🧪 ✅ | `POST /spaces/{id_or_name}/transfer` | `space`, `new_owner` (recipient must accept; not destructive) |
 
 ## Tier: `addons_consumer`
 
-> The `allowed_addon_services_*` tools formerly listed here ship with the `teams` tier in Phase 2b (they target `/teams/{id_or_name}/allowed-addon-services`). See the teams tier table.
+> Phase 3 tools below. The `allowed_addon_services_*` tools formerly listed here ship with the `teams` tier in Phase 2b. `addon_webhooks_delete` confirm-targets the parent add-on name (notes/divergences.md #39). `sso_token_for_addon` is a POST treated as a read (#41).
 
 | Tool | Wraps | Params |
 |---|---|---|
-| `addon_services_list` 📄 | `GET /addon-services` | — |
-| `addon_services_info` | `GET /addon-services/{id_or_name}` | `service` |
-| `region_capabilities_list` 📄 | `GET /addon-services/{id_or_name}/region-capabilities` | `service` |
-| `plans_list` 📄 | `GET /addon-services/{id_or_name}/plans` | `service` |
-| `plans_info` | `GET /addon-services/{id_or_name}/plans/{id_or_name}` | `service`, `plan` |
-| `addons_list` 📄 | `GET /addons` | — |
-| `addons_info` | `GET /addons/{id_or_name}` | `addon` |
-| `addons_list_by_app` 📄 | `GET /apps/{id_or_name}/addons` | `app` |
-| `addons_list_by_user` 📄 | `GET /users/~/addons` | — |
-| `addons_resolve` | `POST /actions/addons/resolve` | `addon`, `app?`, `addon_service?` |
-| `addons_create` 🧪 | `POST /apps/{id_or_name}/addons` | `app`, `plan`, `name?`, `attachment?`, `config?`, `confirm?` |
-| `addons_update` 🧪 | `PATCH /apps/{id_or_name}/addons/{id_or_name}` | `app`, `addon`, `plan` |
-| `addons_delete` ⚠ | `DELETE /apps/{id_or_name}/addons/{id_or_name}` | `app`, `addon`, `confirm: <name>` |
-| `addon_attachments_list` 📄 | `GET /addon-attachments` | — |
-| `addon_attachments_list_by_app` 📄 | `GET /apps/{id_or_name}/addon-attachments` | `app` |
-| `addon_attachments_list_by_addon` 📄 | `GET /addons/{id_or_name}/addon-attachments` | `addon` |
-| `addon_attachments_info` | `GET /addon-attachments/{id}` | `attachment` |
-| `addon_attachments_create` 🧪 | `POST /addon-attachments` | `addon`, `app`, `name?`, `namespace?` |
-| `addon_attachments_delete` ⚠ | `DELETE /addon-attachments/{id}` | `attachment`, `confirm: <name>` |
-| `addon_webhooks_list` 📄 | `GET /addons/{id_or_name}/webhooks` | `addon` |
-| `addon_webhooks_info` | `GET /addons/{id_or_name}/webhooks/{id}` | `addon`, `webhook` |
-| `addon_webhooks_create` 🧪 | `POST /addons/{id_or_name}/webhooks` | `addon`, `url`, `include`, `level`, `secret?` |
-| `addon_webhooks_update` 🧪 | `PATCH /addons/{id_or_name}/webhooks/{id}` | `addon`, `webhook`, fields |
-| `addon_webhooks_delete` ⚠ | `DELETE /addons/{id_or_name}/webhooks/{id}` | `addon`, `webhook`, `confirm: <addon>` |
-| `addon_webhook_deliveries_list` 📄 | `GET /addons/{id_or_name}/webhook-deliveries` | `addon` |
-| `addon_webhook_events_list` 📄 | `GET /addons/{id_or_name}/webhook-events` | `addon` |
-| `addon_config_get` | `GET /addons/{id_or_name}/config` | `addon` |
+| `addons_list` 📄 ✅ | `GET /addons` | — |
+| `addons_info` ✅ | `GET /addons/{id_or_name}` | `addon` |
+| `addons_resolve` ✅ | `POST /actions/addons/resolve` | `addon`, `app?`, `addon_service?` (POST-as-read) |
+| `addon_services_list` 📄 ✅ | `GET /addon-services` | — |
+| `addon_services_info` ✅ | `GET /addon-services/{id_or_name}` | `service` |
+| `addon_regions_list` ✅ | `GET /addon-services/{id_or_name}/region-capabilities` | `service` |
+| `addon_plans_list` 📄 ✅ | `GET /addon-services/{id_or_name}/plans` | `service` |
+| `addon_plans_info` ✅ | `GET /addon-services/{id_or_name}/plans/{id_or_name}` | `service`, `plan` |
+| `addon_actions_list` ✅ | `GET /addon-services/{id_or_name}/actions` | `service` (not all services publish actions) |
+| `addon_attachments_list` 📄 ✅ | `GET /addon-attachments` | — |
+| `addon_attachments_info` ✅ | `GET /addon-attachments/{id}` | `attachment` |
+| `addon_attachments_resolve` ✅ | `POST /actions/addon-attachments/resolve` | `addon_attachment`, `app?`, `addon_service?` |
+| `addon_config_get` ✅ | `GET /addons/{id_or_name}/config` | `addon` |
+| `addon_webhooks_list` 📄 ✅ | `GET /addons/{id_or_name}/webhooks` | `addon` |
+| `addon_webhooks_info` ✅ | `GET /addons/{id_or_name}/webhooks/{id}` | `addon`, `webhook` |
+| `sso_token_for_addon` ✅ | `POST /addons/{id_or_name}/sso` | `addon` (POST-as-read; one-time SSO URL) |
+| `addons_list_by_app` 📄 | `GET /apps/{id_or_name}/addons` | `app` (apps-tier alternative) |
+| `addons_list_by_user` 📄 | `GET /users/~/addons` | — (account-tier alternative) |
+| `addon_attachments_list_by_app` 📄 | `GET /apps/{id_or_name}/addon-attachments` | `app` (apps-tier alternative) |
+| `addon_attachments_list_by_addon` 📄 | `GET /addons/{id_or_name}/addon-attachments` | `addon` (deferred to a focused phase) |
+| `addon_webhook_deliveries_list` 📄 | `GET /addons/{id_or_name}/webhook-deliveries` | `addon` (deferred) |
+| `addon_webhook_events_list` 📄 | `GET /addons/{id_or_name}/webhook-events` | `addon` (deferred) |
+| `addons_create` 🧪 ✅ | `POST /apps/{id_or_name}/addons` | `app`, `plan`, `name?`, `attachment?`, `config?`, `confirm?` (Heroku billing confirm) |
+| `addons_update` 🧪 ✅ | `PATCH /apps/{id_or_name}/addons/{id_or_name}` | `app`, `addon`, `plan` |
+| `addons_destroy` ⚠ ✅ | `DELETE /apps/{id_or_name}/addons/{id_or_name}` | `app`, `addon`, `confirm: <add-on canonical name from prefetch>` |
+| `addons_provision_release_test_resource` 🧪 ✅ | `POST /apps/{id}/addons/{addon}/actions/provision-release-test-resource` | `app`, `addon` |
+| `addons_promote_to_release` 🧪 ✅ | `POST /apps/{id}/addons/{addon}/actions/promote-to-release` | `app`, `addon` |
+| `addon_attachments_create` 🧪 ✅ | `POST /addon-attachments` | `addon`, `app`, `name?`, `namespace?`, `confirm?` |
+| `addon_attachments_destroy` ⚠ ✅ | `DELETE /addon-attachments/{id}` | `attachment`, `confirm: <attachment name from prefetch>` |
+| `addon_config_update` 🧪 ✅ | `PATCH /addons/{id_or_name}/config` | `addon`, `config: [{name, value\|null}]` |
+| `addon_actions_run` 🧪 ✅ | `POST /addons/{id_or_name}/actions/{action}` | `addon`, `action`, `body?` (vendor-defined; 404 if service publishes no action) |
+| `addon_webhooks_create` 🧪 ✅ | `POST /addons/{id_or_name}/webhooks` | `addon`, `url`, `include`, `level`, `secret?` |
+| `addon_webhooks_update` 🧪 ✅ | `PATCH /addons/{id_or_name}/webhooks/{id}` | `addon`, `webhook`, fields |
+| `addon_webhooks_delete` ⚠ ✅ | `DELETE /addons/{id_or_name}/webhooks/{id}` | `addon`, `webhook`, `confirm: <add-on name from prefetch>` |
 
 ## Tier: `pipelines`
 
+> Phase 3 tools below. Decision 2: `pipelines_promote` and `pipelines_promote_to_new` are NOT destructive — they accept `dry_run` but no `confirm`. Promotion is the normal CI/CD flow (notes/divergences.md #36). `pipeline_couplings_destroy` confirm-targets the parent pipeline's name (#38).
+
 | Tool | Wraps | Params |
 |---|---|---|
-| `pipelines_list` 📄 | `GET /pipelines` | — |
-| `pipelines_info` | `GET /pipelines/{id_or_name}` | `pipeline` |
-| `pipelines_create` 🧪 | `POST /pipelines` | `name`, `owner?` |
-| `pipelines_update` 🧪 | `PATCH /pipelines/{id_or_name}` | `pipeline`, fields |
-| `pipelines_delete` ⚠ | `DELETE /pipelines/{id_or_name}` | `pipeline`, `confirm: <name>` |
-| `pipeline_couplings_list` 📄 | `GET /pipeline-couplings` | — |
-| `pipeline_couplings_list_by_pipeline` 📄 | `GET /pipelines/{id}/pipeline-couplings` | `pipeline` |
-| `pipeline_couplings_info` | `GET /pipeline-couplings/{id}` | `coupling` |
-| `pipeline_couplings_info_by_app` | `GET /apps/{id_or_name}/pipeline-couplings` | `app` |
-| `pipeline_couplings_create` 🧪 | `POST /pipeline-couplings` | `app`, `pipeline`, `stage` |
-| `pipeline_couplings_update` 🧪 | `PATCH /pipeline-couplings/{id}` | `coupling`, `stage` |
-| `pipeline_couplings_delete` ⚠ | `DELETE /pipeline-couplings/{id}` | `coupling`, `confirm: <id>` |
-| `pipeline_builds_list` 📄 | `GET /pipelines/{id}/latest-builds` | `pipeline` |
-| `pipeline_config_vars_get` | `GET /pipelines/{id_or_name}/stage/{stage}/config-vars` | `pipeline`, `stage` |
-| `pipeline_config_vars_update` 🧪 | `PATCH /pipelines/{id_or_name}/stage/{stage}/config-vars` | `pipeline`, `stage`, `config` |
-| `pipeline_deployments_list` 📄 | `GET /pipelines/{id}/latest-deployments` | `pipeline` |
-| `pipeline_promotions_list` 📄 | `GET /pipeline-promotions` | — |
-| `pipeline_promotions_info` | `GET /pipeline-promotions/{id}` | `promotion` |
-| `pipeline_promotions_create` 🧪 | `POST /pipeline-promotions` | `pipeline`, `source`, `targets[]` |
-| `pipeline_promotion_targets_list` 📄 | `GET /pipeline-promotions/{id}/promotion-targets` | `promotion` |
-| `pipeline_releases_list` 📄 | `GET /pipelines/{id}/latest-releases` | `pipeline` |
-| `pipeline_stacks_list` 📄 | `GET /pipeline-stack-config` | — |
-| `pipeline_transfers_create` ⚠🧪 | `POST /pipeline-transfers` | `pipeline`, `new_owner`, `confirm: <name>` |
+| `pipelines_list` 📄 ✅ | `GET /pipelines` | — |
+| `pipelines_info` ✅ | `GET /pipelines/{id_or_name}` | `pipeline` |
+| `pipelines_create` 🧪 ✅ | `POST /pipelines` | `name`, `owner?` |
+| `pipelines_update` 🧪 ✅ | `PATCH /pipelines/{id_or_name}` | `pipeline`, fields |
+| `pipelines_destroy` ⚠ ✅ | `DELETE /pipelines/{id_or_name}` | `pipeline`, `confirm: <pipeline name from prefetch>` |
+| `pipeline_couplings_list` 📄 ✅ | `GET /pipeline-couplings` | — |
+| `pipeline_couplings_info` ✅ | `GET /pipeline-couplings/{id}` | `coupling` |
+| `pipeline_couplings_by_app` ✅ | `GET /apps/{id_or_name}/pipeline-couplings` | `app` |
+| `pipeline_couplings_create` 🧪 ✅ | `POST /pipeline-couplings` | `app`, `pipeline`, `stage` |
+| `pipeline_couplings_update` 🧪 ✅ | `PATCH /pipeline-couplings/{id}` | `coupling`, `stage` |
+| `pipeline_couplings_destroy` ⚠ ✅ | `DELETE /pipeline-couplings/{id}` | `coupling`, `confirm: <parent pipeline name from prefetch>` |
+| `pipeline_deployments_list` 📄 ✅ | `GET /pipelines/{id}/latest-deployments` | `pipeline` |
+| `pipeline_releases_list` 📄 ✅ | `GET /pipelines/{id}/latest-releases` | `pipeline` |
+| `pipeline_promotions_list` 📄 ✅ | `GET /pipeline-promotions` | — |
+| `pipeline_promotions_info` ✅ | `GET /pipeline-promotions/{id}` | `promotion` |
+| `pipeline_promotion_targets_list` 📄 ✅ | `GET /pipeline-promotions/{id}/promotion-targets` | `promotion` |
+| `pipelines_promote` 🧪 ✅ | `POST /pipeline-promotions` | `pipeline`, `source`, `targets[]` (no confirm — Decision 2) |
+| `pipelines_promote_to_new` 🧪 ✅ | `POST /pipeline-promotions` | `pipeline`, `source`, `new_app_name`, `new_app_stage` (no confirm — Decision 2) |
+| `pipeline_transfer` 🧪 ✅ | `POST /pipeline-transfers` | `pipeline`, `new_owner`, `new_owner_type` (recipient must accept) |
+| `pipeline_review_app_config_info` ✅ | `GET /pipelines/{id_or_name}/review-app-config` | `pipeline` |
+| `pipeline_review_app_config_update` 🧪 ✅ | `PATCH /pipelines/{id_or_name}/review-app-config` | `pipeline`, fields |
+| `pipeline_review_apps_enable` 🧪 ✅ | `POST /pipelines/{id_or_name}/review-app-config` | `pipeline`, `repo`, fields |
+| `pipeline_couplings_list_by_pipeline` 📄 | `GET /pipelines/{id}/pipeline-couplings` | `pipeline` (deferred — duplicate of `pipeline_couplings_list` with filter) |
+| `pipeline_builds_list` 📄 | `GET /pipelines/{id}/latest-builds` | `pipeline` (deferred) |
+| `pipeline_config_vars_get` | `GET /pipelines/{id_or_name}/stage/{stage}/config-vars` | `pipeline`, `stage` (deferred) |
+| `pipeline_config_vars_update` 🧪 | `PATCH /pipelines/{id_or_name}/stage/{stage}/config-vars` | `pipeline`, `stage`, `config` (deferred) |
+| `pipeline_stacks_list` 📄 | `GET /pipeline-stack-config` | — (deferred) |
 
 ## Tier: `data` (host: `api.data.heroku.com`)
 

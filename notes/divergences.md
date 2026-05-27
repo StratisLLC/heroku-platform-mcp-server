@@ -209,6 +209,101 @@ Phase 2b adds:
 Total Phase 2b: **49 new tools** (11 account writes + 20 teams reads + 18 teams writes).
 Total tools shipped to date: **152** (103 from Phase 1 + 2a, plus 49 Phase 2b).
 
+---
+
+# Phase 3 divergences
+
+## 34. Phase 3 — tier names align with the existing prober (no new probes added)
+
+**Observation:** The four Phase 3 tier probes (`enterprise.list`, `spaces.list`, `addons.list`, `pipelines.list`) were already defined in `packages/core/src/probes.ts` from Phase 0. Phase 3 wired the existing probes into `packages/platform-mcp/src/tools/index.ts` via four new `tierAvailable` checks (`enterprise`, `spaces`, `addons_consumer`, `pipelines`). No probe definitions or prober behaviour changed. The new `prober.test.ts` block exercises each Phase 3 probe against the standard response classes (200, 200-empty, 401, 402, 403, 404, 429, timeout) as required by the handoff acceptance criteria.
+
+**Doc impact:** None — CAPABILITY_PROBES.md and ARCHITECTURE.md §5 already describe these probes.
+
+## 35. Phase 3 — enterprise tool names follow the handoff prompt (not the older TOOLS.md draft)
+
+**Observation:** TOOLS.md's enterprise tier was drafted with `enterprise_account_info`, `enterprise_account_update`, `enterprise_members_list`, etc. The Phase 3 handoff prompt named the tools `enterprise_accounts_info`, `enterprise_accounts_update`, `enterprise_account_members_list`, etc. — pluralising the resource segment and lifting the per-resource action to `account_members_*` form. We use the handoff prompt's names since it carries the most recent design decisions; TOOLS.md was updated to match in this phase. The endpoints are unchanged.
+
+## 36. Phase 3 — Decision 2: pipeline promotion is non-destructive
+
+**Observation:** Phase 3 Decision 2 specifies that `pipelines_promote` and `pipelines_promote_to_new` accept `dry_run` but do NOT require `confirm`. Promotion is the normal CI/CD flow; gating every promotion on a verbal confirm would be hostile UX. The dry-run preview surfaces source app → target app(s) so the user can see what's being promoted before the real call.
+
+**Doc impact:** TOOLS.md updated to drop the `⚠` marker on `pipelines_promote_create` (now `pipelines_promote`).
+
+## 37. Phase 3 — Decision 5: Shield spaces require `log_drain_url` at creation time
+
+**Observation:** When `spaces_create` is called with `shield: true`, the `log_drain_url` parameter MUST be provided — Heroku permanently disables log-drain support on Shield spaces created without one (the drain cannot be added later). The schema enforcement lives inside `build()` so the validator runs on both dry-run and real-call paths and throws a typed `InvalidParamsError` with `fields: ['log_drain_url']` and a message that references the docs guidance verbatim ("Use https://localhost as a placeholder if you don't yet have a real drain URL"). Tested in `spaces.test.ts` ("spaces_create REJECTS shield=true without log_drain_url").
+
+**Doc impact:** TOOLS.md updated with a one-line annotation next to `spaces_create`.
+
+## 38. Phase 3 — pipeline_couplings_destroy confirm-targets the parent pipeline name
+
+**Observation:** Pipeline-coupling ids are opaque UUIDs that wouldn't capture user intent. The `pipeline_couplings_destroy` tool prefetches the coupling, then resolves the confirm target to `coupling.pipeline.name` — the human-readable pipeline name. This matches the Phase 2b fix pattern (canonical name from prefetch, not args).
+
+## 39. Phase 3 — addon_webhooks_delete confirm-targets the parent add-on name
+
+**Observation:** Webhook URLs are not user-friendly identifiers (e.g. arbitrary HTTPS endpoints). `addon_webhooks_delete` prefetches the parent add-on (`GET /addons/{addon}`) rather than the webhook itself, so the confirm target is the add-on name. The webhook is identified by its UUID path segment on the DELETE request.
+
+## 40. Phase 3 — addons_resolve and addon_attachments_resolve treated as reads
+
+**Observation:** Both endpoints are `POST` (the body is a filter — Heroku rejects search params in URLs). They're registered as plain reads, not write tools: no audit log entry, no confirm guard, no dry_run. Same pattern as Phase 1's `apps_filter` and `app_setups_create` (see note #2). The catalog endpoints `addon_services_list` / `addon_plans_list` / `addon_regions_list` are similarly read-only.
+
+## 41. Phase 3 — sso_token_for_addon is a read despite POST verb
+
+**Observation:** `POST /addons/{id}/sso` returns a one-time SSO URL for the partner's dashboard. No Heroku-side state changes. We mark the tool `readOnlyHint: true` and don't audit it as a mutation. The tool description carries the "marked read-style despite the POST verb" note so reviewers can verify.
+
+## 42. Phase 3 — `credit_pool_info` exposed best-effort
+
+**Observation:** TOOLS.md doesn't list `credit_pool_info` explicitly. The handoff prompt mentioned it conditionally ("if exposed in Heroku's enterprise API"). We expose it under the path `GET /enterprise-accounts/{id_or_name}/credit-pool`. Heroku returns 404 when the credit-pool resource is not enabled on the account's plan — the tool surfaces that as a typical not_found envelope without throwing. The tool description carries this fallback semantics.
+
+## 43. Phase 3 — `addon_actions_run` description warns about per-service availability
+
+**Observation:** Heroku's `POST /addons/{id}/actions/{action}` only works for add-on services that publish actions. Most services don't (and the endpoint returns 404). The tool description tells the model to call `addon_actions_list` on the parent service first to discover available actions. The body parameter is `Record<string, unknown>` (passed through verbatim to the partner), since action semantics are vendor-defined.
+
+## 44. Phase 3 — final tool count
+
+Phase 3 adds tools across four tiers:
+
+  Enterprise (15):   enterprise_accounts_list, enterprise_accounts_info, enterprise_account_daily_usage,
+                     enterprise_account_monthly_usage, enterprise_account_members_list,
+                     enterprise_account_member_apps_list, enterprise_account_permissions_list,
+                     enterprise_account_addons_list, enterprise_account_teams_list, credit_pool_info,
+                     enterprise_accounts_update, enterprise_account_members_create_or_update,
+                     enterprise_account_members_delete, enterprise_account_teams_create,
+                     enterprise_account_teams_update
+
+  Spaces (23):       spaces_list, spaces_info, spaces_app_access_list, spaces_nat_info,
+                     spaces_inbound_ruleset_current, spaces_outbound_ruleset_current,
+                     spaces_inbound_rulesets_list, spaces_outbound_rulesets_list,
+                     vpn_connections_list, vpn_connections_info, peerings_list, peerings_info,
+                     space_transfer_list, spaces_create, spaces_update, spaces_destroy,
+                     vpn_connections_create, vpn_connections_destroy, peerings_create,
+                     peerings_destroy, space_transfer_create, spaces_inbound_ruleset_create,
+                     spaces_outbound_ruleset_create
+
+  Add-ons (28):      addons_list, addons_info, addons_resolve, addon_services_list,
+                     addon_services_info, addon_attachments_list, addon_attachments_info,
+                     addon_attachments_resolve, addon_config_get, addon_actions_list,
+                     addon_regions_list, addon_plans_list, addon_plans_info,
+                     addon_webhooks_list, addon_webhooks_info, sso_token_for_addon,
+                     addons_create, addons_update, addons_destroy,
+                     addons_provision_release_test_resource, addons_promote_to_release,
+                     addon_attachments_create, addon_attachments_destroy, addon_config_update,
+                     addon_actions_run, addon_webhooks_create, addon_webhooks_update,
+                     addon_webhooks_delete
+
+  Pipelines (22):    pipelines_list, pipelines_info, pipeline_couplings_list,
+                     pipeline_couplings_info, pipeline_couplings_by_app, pipeline_releases_list,
+                     pipeline_promotions_list, pipeline_promotions_info,
+                     pipeline_promotion_targets_list, pipeline_deployments_list,
+                     pipeline_review_app_config_info, pipelines_create, pipelines_update,
+                     pipelines_destroy, pipeline_couplings_create, pipeline_couplings_update,
+                     pipeline_couplings_destroy, pipelines_promote, pipelines_promote_to_new,
+                     pipeline_transfer, pipeline_review_app_config_update,
+                     pipeline_review_apps_enable
+
+Total Phase 3: **88 new tools** (15 enterprise + 23 spaces + 28 addons + 22 pipelines).
+Total tools shipped to date: **240** (152 from Phase 1 + 2a + 2b, plus 88 Phase 3).
+
 ## 33. Phase 2b fix — confirm pattern uses canonical name from prefetched resource, not input arg
 
 **Observation:** Original Phase 2a / 2b design: `confirm` matched whatever was passed as `args.<id-field>`. Bug surfaced in the Phase 2b Claude Desktop acceptance test: when Claude resolves a resource to its UUID internally and passes the UUID as input, the confirm guard then demanded the UUID as `confirm` — but the user typed the human-readable name in conversation. That defeats the purpose of the gate, which is supposed to capture "the user explicitly typed this canonical identifier."

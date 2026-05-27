@@ -390,3 +390,84 @@ describe('runProbes — result envelope', () => {
     expect(r.probedAt).toBe('2026-05-22T14:33:01.234Z');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 3 probes — enterprise / spaces / addons_consumer / pipelines
+//
+// The runProbes engine is generic, so its response-class behaviour is already
+// exhaustively covered by the apps.list cases above. The block below pins each
+// new Phase 3 probe to its tier and exercises the most load-bearing classes:
+// 200 (available), 200-with-empty-array (still available), 403 (forbidden),
+// and timeout (not available). Together with the apps.list matrix this gives
+// end-to-end coverage that the new probes light up the right tiers.
+// ---------------------------------------------------------------------------
+
+const PHASE3_PROBES = [
+  { id: 'enterprise.list', tier: 'enterprise' },
+  { id: 'spaces.list', tier: 'spaces' },
+  { id: 'addons.list', tier: 'addons_consumer' },
+  { id: 'pipelines.list', tier: 'pipelines' },
+] as const;
+
+for (const { id, tier } of PHASE3_PROBES) {
+  describe(`runProbes — ${id} (Phase 3 ${tier} tier)`, () => {
+    const probe = PLATFORM_PROBES.find((p) => p.id === id)!;
+
+    it('200 → tier available', async () => {
+      const { fetch } = scriptFetch([() => F.ok([{ id: 'x' }])]);
+      const r = await runProbes({ ...baseOpts, probes: [probe], fetch });
+      expect((r.tiers[tier] as TierResult).available).toBe(true);
+    });
+
+    it('200 with empty array → tier still available', async () => {
+      const { fetch } = scriptFetch([() => F.ok([])]);
+      const r = await runProbes({ ...baseOpts, probes: [probe], fetch });
+      expect((r.tiers[tier] as TierResult).available).toBe(true);
+    });
+
+    it('401 unauthorized → tier unavailable (account.self handles 401 separately)', async () => {
+      const { fetch } = scriptFetch([() => F.unauthorized()]);
+      const r = await runProbes({ ...baseOpts, probes: [probe], fetch });
+      expect((r.tiers[tier] as TierResult).available).toBe(false);
+    });
+
+    it('402 delinquent → tier unavailable', async () => {
+      const { fetch } = scriptFetch([() => F.delinquent()]);
+      const r = await runProbes({ ...baseOpts, probes: [probe], fetch });
+      expect((r.tiers[tier] as TierResult).available).toBe(false);
+    });
+
+    it('403 forbidden → tier unavailable, reason forbidden', async () => {
+      const { fetch } = scriptFetch([() => F.forbidden()]);
+      const r = await runProbes({ ...baseOpts, probes: [probe], fetch });
+      const t = r.tiers[tier] as TierResult;
+      expect(t.available).toBe(false);
+      expect(t.reason).toBe('forbidden');
+    });
+
+    it('404 not_found → tier available but empty (caller has access, no instances)', async () => {
+      const { fetch } = scriptFetch([() => F.notFound()]);
+      const r = await runProbes({ ...baseOpts, probes: [probe], fetch });
+      expect((r.tiers[tier] as TierResult).available).toBe(true);
+    });
+
+    it('429 → fails-open with reason rate_limit', async () => {
+      const { fetch } = scriptFetch([() => F.rateLimited(), () => F.rateLimited()]);
+      const r = await runProbes({
+        ...baseOpts,
+        maxAttempts: 2,
+        probes: [probe],
+        fetch,
+      });
+      expect((r.tiers[tier] as TierResult).reason).toBe('rate_limit');
+    });
+
+    it('timeout → tier unavailable, reason timeout', async () => {
+      const { fetch } = scriptFetch([() => F.timeout()]);
+      const r = await runProbes({ ...baseOpts, probes: [probe], fetch, timeoutMs: 10 });
+      const t = r.tiers[tier] as TierResult;
+      expect(t.available).toBe(false);
+      expect(t.reason).toBe('timeout');
+    });
+  });
+}
