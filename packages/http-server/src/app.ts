@@ -40,6 +40,7 @@ import { buildMeRoutes } from './routes/me.js';
 import { buildAuditRoutes } from './routes/audit.js';
 import { buildAdminRoutes } from './routes/admin.js';
 import { buildMcpRoutes } from './routes/mcp.js';
+import { buildWellKnownRoutes } from './routes/wellknown.js';
 import type { TransportManager } from './mcp/transport.js';
 import type { WebSocketFactory } from './mcp/dynos-run.js';
 
@@ -86,6 +87,11 @@ export function buildApp(opts: BuildAppOptions): BuiltApp {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     await webSessionAuth(mwDeps)(c, next);
   });
+
+  // OAuth 2.0 discovery documents — mounted before public so they are
+  // unauthenticated and not subject to the session-cookie reader (which is
+  // harmless but unnecessary).
+  app.route('/', buildWellKnownRoutes({ publicUrl: opts.cfg.publicUrl }));
 
   // Public routes (landing, sign-in, callback, sign-out). Reads `auth` from
   // context but doesn't gate on it.

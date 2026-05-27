@@ -9,6 +9,7 @@ function baseEnv(): Record<string, string> {
     HEROKUMCP_OAUTH_CLIENT_ID: 'cid',
     HEROKUMCP_OAUTH_CLIENT_SECRET: 'csec',
     HEROKUMCP_ADMIN_CONTACT: 'admin@example.com',
+    HEROKUMCP_PUBLIC_URL: 'https://herokumcp.example.com',
   };
 }
 
@@ -76,5 +77,22 @@ describe('loadConfig', () => {
   it('isProduction reflects NODE_ENV', () => {
     expect(loadConfig({ ...baseEnv(), NODE_ENV: 'production' }).isProduction).toBe(true);
     expect(loadConfig({ ...baseEnv(), NODE_ENV: 'development' }).isProduction).toBe(false);
+  });
+
+  it('refuses to start without HEROKUMCP_PUBLIC_URL', () => {
+    const env = baseEnv();
+    delete env.HEROKUMCP_PUBLIC_URL;
+    expect(() => loadConfig(env)).toThrow(/HEROKUMCP_PUBLIC_URL/);
+  });
+
+  it('refuses to start with a HEROKUMCP_PUBLIC_URL missing scheme', () => {
+    expect(() =>
+      loadConfig({ ...baseEnv(), HEROKUMCP_PUBLIC_URL: 'herokumcp.example.com' }),
+    ).toThrow(/HEROKUMCP_PUBLIC_URL/);
+  });
+
+  it('trims a trailing slash from HEROKUMCP_PUBLIC_URL', () => {
+    const cfg = loadConfig({ ...baseEnv(), HEROKUMCP_PUBLIC_URL: 'https://srv.example/' });
+    expect(cfg.publicUrl).toBe('https://srv.example');
   });
 });

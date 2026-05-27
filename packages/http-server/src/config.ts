@@ -13,9 +13,10 @@
  *   HEROKUMCP_ADMIN_CONTACT         email/URL shown on access-denied pages
  *   DATABASE_URL                    Postgres connection string
  *
+ *   HEROKUMCP_PUBLIC_URL            external base URL, e.g. https://herokumcp.example.com
+ *
  * Optional:
  *   PORT                            HTTP port (default 3000)
- *   HEROKUMCP_PUBLIC_URL            external base URL (default derived from request)
  *   HEROKUMCP_OAUTH_SCOPE           OAuth scope (default "write-protected")
  *   MCP_ALLOWED_EMAILS              comma-separated allowlist
  *   MCP_ALLOWED_TEAMS               comma-separated team-name allowlist
@@ -37,7 +38,12 @@ const Env = z.object({
   HEROKUMCP_OAUTH_CLIENT_SECRET: z.string().min(1, 'HEROKUMCP_OAUTH_CLIENT_SECRET is required'),
   HEROKUMCP_ADMIN_CONTACT: z.string().min(1, 'HEROKUMCP_ADMIN_CONTACT is required'),
   HEROKUMCP_OAUTH_SCOPE: z.string().default('write-protected'),
-  HEROKUMCP_PUBLIC_URL: z.string().optional(),
+  HEROKUMCP_PUBLIC_URL: z
+    .string()
+    .min(1, 'HEROKUMCP_PUBLIC_URL is required (e.g. https://herokumcp.example.com)')
+    .refine((s) => /^https?:\/\//.test(s), {
+      message: 'HEROKUMCP_PUBLIC_URL must start with http:// or https://',
+    }),
   MCP_ALLOWED_EMAILS: z.string().optional(),
   MCP_ALLOWED_TEAMS: z.string().optional(),
   MCP_ADMIN_EMAILS: z.string().optional(),
@@ -52,7 +58,7 @@ type EnvOutput = z.output<typeof Env>;
 export interface Config {
   port: number;
   isProduction: boolean;
-  publicUrl: string | undefined;
+  publicUrl: string;
   databaseUrl: string;
   dbPoolMax: number;
   dbSsl: 'require' | 'no-verify' | 'off';
@@ -98,7 +104,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const cfg: Config = {
     port: e.PORT,
     isProduction: (e.NODE_ENV ?? '').toLowerCase() === 'production',
-    publicUrl: trimSlash(e.HEROKUMCP_PUBLIC_URL),
+    publicUrl: trimSlash(e.HEROKUMCP_PUBLIC_URL)!,
     databaseUrl: e.DATABASE_URL,
     dbPoolMax: e.HEROKUMCP_DB_POOL_MAX,
     dbSsl: e.HEROKUMCP_DB_SSL,

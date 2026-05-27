@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { createFakePool } from '../helpers/fake-pool.js';
+import { createFakePool, FakeStore } from '../helpers/fake-pool.js';
 import {
   insertOAuthClient,
   findOAuthClientById,
@@ -36,8 +36,8 @@ function sha(s: string): Uint8Array {
   return new Uint8Array(createHash('sha256').update(s).digest());
 }
 
-function fakePool() {
-  return createFakePool() as unknown as pg.Pool;
+function fakePool(store?: FakeStore): pg.Pool {
+  return createFakePool(store) as unknown as pg.Pool;
 }
 
 describe('oauth_clients repo', () => {
@@ -129,8 +129,8 @@ describe('oauth_clients repo', () => {
 
 describe('oauth_authorizations repo', () => {
   async function setup() {
-    const pool = fakePool();
-    pool.store!.users.push({
+    const store = new FakeStore();
+    store.users.push({
       id: 'user-1',
       heroku_id: 'h1',
       email: 'u@example.com',
@@ -138,6 +138,7 @@ describe('oauth_authorizations repo', () => {
       signed_in_at: new Date(),
       last_seen_at: new Date(),
     });
+    const pool = fakePool(store);
     await insertOAuthClient(pool, {
       clientId: 'c1',
       clientSecretHash: sha('s'),
@@ -194,8 +195,8 @@ describe('oauth_authorizations repo', () => {
 
 describe('oauth_tokens repo', () => {
   async function setup() {
-    const pool = fakePool();
-    pool.store!.users.push({
+    const store = new FakeStore();
+    store.users.push({
       id: 'user-1',
       heroku_id: 'h1',
       email: 'u@example.com',
@@ -203,6 +204,7 @@ describe('oauth_tokens repo', () => {
       signed_in_at: new Date(),
       last_seen_at: new Date(),
     });
+    const pool = fakePool(store);
     await insertOAuthClient(pool, {
       clientId: 'c1',
       clientSecretHash: sha('s'),

@@ -5,6 +5,7 @@
 import { html, layout, raw, type SafeHtml } from './layout.js';
 import type { AuditEntryRow } from '../db/repos/audit-log.js';
 import type { ConnectionTokenRow } from '../db/repos/connection-tokens.js';
+import type { OAuthClientRow } from '../db/repos/oauth-clients.js';
 import type { UserRow } from '../db/repos/users.js';
 
 export interface ViewerCtx {
@@ -126,6 +127,8 @@ export interface MePageView {
   /** Plaintext token. Only set on first display after sign-in or token reset. */
   newToken?: string | null;
   tokens: ConnectionTokenRow[];
+  /** OAuth-DCR clients (Claude Desktop, etc.) bound to this user. */
+  clients?: OAuthClientRow[];
 }
 
 export function renderMe(ctx: ViewerCtx, v: MePageView): string {
