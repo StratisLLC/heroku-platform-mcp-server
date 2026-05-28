@@ -153,6 +153,7 @@ export function buildApp(opts: BuildAppOptions): BuiltApp {
     buildMcpRoutes({
       pool: opts.pool,
       cfg: opts.cfg,
+      oauthCfg: opts.oauthCfg,
       transports: opts.transports,
       ...(opts.fetch ? { fetch: opts.fetch } : {}),
       ...(opts.webSocketFactory ? { webSocketFactory: opts.webSocketFactory } : {}),

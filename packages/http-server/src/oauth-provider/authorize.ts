@@ -256,6 +256,7 @@ async function isAllowlistedUser(
         deps.pool,
         userId,
         deps.cfg.masterKey,
+        deps.oauthCfg,
       );
       const t = await fetchTeams(deps.oauthCfg, accessToken);
       teams = t.map((x) => x.name);

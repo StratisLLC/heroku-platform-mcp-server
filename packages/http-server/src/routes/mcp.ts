@@ -13,17 +13,20 @@ import type pg from 'pg';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import type { AppEnv } from '../auth/middleware.js';
-import { resolveUserAccessToken } from '../oauth/flow.js';
+import { ReauthRequiredError, resolveUserAccessToken } from '../oauth/flow.js';
+import type { HerokuOAuthConfig } from '../oauth/heroku.js';
 import { buildSessionMcp } from '../mcp/setup.js';
 import { dbAuditSink } from '../mcp/audit-wrapper.js';
 import { generateSessionId, type TransportManager } from '../mcp/transport.js';
 import type { Config } from '../config.js';
 import type { WebSocketFactory } from '../mcp/dynos-run.js';
 import { appendAuditEntry } from '../db/repos/audit-log.js';
+import { RESPONSE_ALREADY_SENT } from '@hono/node-server/utils/response';
 
 export interface McpRouteDeps {
   pool: pg.Pool;
   cfg: Config;
+  oauthCfg: HerokuOAuthConfig;
   transports: TransportManager;
   /** Optional injection point for tests (mocked Heroku fetch + WS). */
   fetch?: typeof globalThis.fetch;
@@ -80,12 +83,34 @@ export function buildMcpRoutes(deps: McpRouteDeps): Hono<AppEnv> {
           400,
         );
       }
-      // Decrypt this user's Heroku access token. If decryption fails, the
-      // server's master key probably doesn't match what encrypted the row.
+      // Resolve this user's Heroku access token, refreshing it first if the
+      // stored token is past (or near) its 8-hour TTL. If decryption fails,
+      // the server's master key probably doesn't match what encrypted the
+      // row. If refresh itself fails because Heroku rejected the refresh
+      // token, the user has to re-authenticate.
       let accessToken: string;
       try {
-        accessToken = await resolveUserAccessToken(deps.pool, auth.user.id, deps.cfg.masterKey);
+        accessToken = await resolveUserAccessToken(
+          deps.pool,
+          auth.user.id,
+          deps.cfg.masterKey,
+          deps.oauthCfg,
+        );
       } catch (err) {
+        if (err instanceof ReauthRequiredError) {
+          return c.json(
+            {
+              ok: false,
+              error: {
+                kind: 'auth',
+                code: err.code,
+                message: err.message,
+                signInUrl: `${deps.cfg.publicUrl}/sign-in`,
+              },
+            },
+            401,
+          );
+        }
         return c.json(
           {
             ok: false,
@@ -165,7 +190,7 @@ export function buildMcpRoutes(deps: McpRouteDeps): Hono<AppEnv> {
     // req/res on `c.env`.
     const env = c.env as { incoming: IncomingMessage; outgoing: ServerResponse };
     await session.transport.handleRequest(env.incoming, env.outgoing, body);
-    return undefined;
+    return RESPONSE_ALREADY_SENT;
   });
 
   return router;

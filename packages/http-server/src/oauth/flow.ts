@@ -6,12 +6,22 @@
  *                    user, persist encrypted tokens, mint connection token.
  */
 
-import { encryptWithDek, encryptWithKek, encodeForStorage, generateDek } from '@heroku-mcp/core';
+import {
+  decodeFromStorage,
+  decryptWithDek,
+  decryptWithKek,
+  encodeForStorage,
+  encryptWithDek,
+  encryptWithKek,
+  generateDek,
+} from '@heroku-mcp/core';
 import {
   buildAuthorizeUrl,
   exchangeAuthorizationCode,
   fetchAccount,
   fetchTeams,
+  HerokuOAuthError,
+  refreshAccessToken,
   type HerokuOAuthConfig,
   type HerokuAccount,
   type HerokuTeam,
@@ -19,7 +29,7 @@ import {
 import { makePkcePair, makeStateToken } from './pkce.js';
 import { mintConnectionToken, type MintedToken } from '../auth/connection-token.js';
 import { upsertUser, type UserRow } from '../db/repos/users.js';
-import { upsertHerokuTokens } from '../db/repos/heroku-tokens.js';
+import { findHerokuTokens, upsertHerokuTokens } from '../db/repos/heroku-tokens.js';
 import { issueConnectionToken } from '../db/repos/connection-tokens.js';
 import { withTransaction } from '../db/pool.js';
 import type pg from 'pg';
@@ -193,20 +203,97 @@ export async function completeSignIn(
   };
 }
 
-/** Decrypt the Heroku access token for a user. Throws if the row is missing
- *  or the master key can't unwrap the DEK. */
+/** Thrown when the stored refresh token is itself rejected by Heroku, meaning
+ *  the underlying authorization has been revoked or has expired past its
+ *  longer TTL. The user must sign in again — there is no recovery short of
+ *  the full OAuth flow. Surfaced from the request path with a clear envelope
+ *  so the capability prober (and Claude Desktop) can show a useful message
+ *  instead of a generic 401. */
+export class ReauthRequiredError extends Error {
+  /** Stable shape/code so callers in other packages can recognise it without
+   *  importing the class (e.g. the prober wrapper in core). */
+  readonly code = 'reauth_required' as const;
+  constructor(
+    message: string,
+    public override readonly cause?: unknown,
+  ) {
+    super(message);
+    this.name = 'ReauthRequiredError';
+  }
+}
+
+/** Buffer applied to expires_at when deciding whether to proactively refresh.
+ *  60s gives clock skew + in-flight request headroom without being so large
+ *  that we refresh on every request near the end of a session. */
+const REFRESH_EXPIRY_BUFFER_MS = 60_000;
+
+/** Decrypt the Heroku access token for a user, refreshing it first if the
+ *  stored token has expired or is within the {@link REFRESH_EXPIRY_BUFFER_MS}
+ *  buffer of expiry. Throws {@link ReauthRequiredError} when Heroku rejects
+ *  the refresh token (authorization revoked / refresh-token TTL exceeded). */
 export async function resolveUserAccessToken(
   pool: pg.Pool,
   userId: string,
   masterKey: Uint8Array,
+  oauthCfg: HerokuOAuthConfig,
+  opts: { now?: () => number } = {},
 ): Promise<string> {
-  const { findHerokuTokens } = await import('../db/repos/heroku-tokens.js');
-  const { decryptWithDek, decryptWithKek, decodeFromStorage } = await import('@heroku-mcp/core');
   const row = await findHerokuTokens(pool, userId);
   if (!row) {
     throw new Error('No stored Heroku tokens for user');
   }
   const dek = decryptWithKek(decodeFromStorage(row.encryptedDek), masterKey);
-  const access = decryptWithDek(decodeFromStorage(row.encryptedAccessToken), dek);
-  return new TextDecoder().decode(access);
+  const accessBytes = decryptWithDek(decodeFromStorage(row.encryptedAccessToken), dek);
+  const accessToken = new TextDecoder().decode(accessBytes);
+
+  const now = opts.now ?? Date.now;
+  const expiresAtMs = row.expiresAt.valueOf();
+  if (expiresAtMs - REFRESH_EXPIRY_BUFFER_MS > now()) {
+    return accessToken;
+  }
+
+  // Token is expired or about to expire — refresh it.
+  const refreshBytes = decryptWithDek(decodeFromStorage(row.encryptedRefreshToken), dek);
+  const refreshToken = new TextDecoder().decode(refreshBytes);
+
+  let refreshed;
+  try {
+    refreshed = await refreshAccessToken(oauthCfg, refreshToken);
+  } catch (err) {
+    if (err instanceof HerokuOAuthError) {
+      // Heroku 4xx on the refresh endpoint means the refresh token itself is
+      // no longer valid — the user has to re-authenticate. Anything else (5xx
+      // / network) is transient and bubbles up unchanged for the caller to
+      // retry.
+      const status = err.status ?? 0;
+      if (status >= 400 && status < 500) {
+        throw new ReauthRequiredError(
+          'Your Heroku authorization has expired or been revoked. Sign out and reconnect to continue.',
+          err,
+        );
+      }
+    }
+    throw err;
+  }
+
+  // Persist the rotated tokens (Heroku always returns a fresh refresh_token
+  // alongside the new access_token). Reuse the existing DEK; the master key
+  // can still unwrap it, and rotating the DEK on every refresh would churn
+  // the wrapping for no security gain.
+  const newAccessBlob = encodeForStorage(
+    encryptWithDek(new TextEncoder().encode(refreshed.access_token), dek),
+  );
+  const newRefreshBlob = encodeForStorage(
+    encryptWithDek(new TextEncoder().encode(refreshed.refresh_token), dek),
+  );
+  const newExpiresAt = new Date(now() + refreshed.expires_in * 1000);
+  await upsertHerokuTokens(pool, {
+    userId,
+    encryptedAccessToken: newAccessBlob,
+    encryptedRefreshToken: newRefreshBlob,
+    encryptedDek: row.encryptedDek,
+    expiresAt: newExpiresAt,
+  });
+
+  return refreshed.access_token;
 }
