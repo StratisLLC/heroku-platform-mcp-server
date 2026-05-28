@@ -25,8 +25,12 @@ import { installAuditWrapper, type AuditSink } from './audit-wrapper.js';
 import { registerDynosRunBuffered, type WebSocketFactory } from './dynos-run.js';
 
 export interface SessionMcpOptions {
-  /** Resolved Heroku access token for the signed-in user. */
-  accessToken: string;
+  /** Lazy provider for the user's Heroku access token. Invoked once per
+   *  outgoing Heroku request by the core client, so a stale token can be
+   *  refreshed mid-session without rebuilding the session. The getter is also
+   *  invoked once during session construction (capability probing). May throw
+   *  to abort the request — see {@link ReauthRequiredError}. */
+  getAccessToken: () => Promise<string>;
   /** Stable identifier for audit lines — use the connection-token id. */
   tokenFingerprint: string;
   /** Audit sink for tool-call events. */
@@ -57,7 +61,7 @@ export async function buildSessionMcp(opts: SessionMcpOptions): Promise<BuiltSer
   let auditWrappedRegisterTool: ((name: string, cfg: any, handler: any) => any) | null = null;
 
   const built = await buildServer({
-    token: () => opts.accessToken,
+    token: opts.getAccessToken,
     tokenFingerprint: opts.tokenFingerprint,
     paths,
     ...(opts.fetch ? { fetch: opts.fetch } : {}),

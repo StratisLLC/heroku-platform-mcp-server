@@ -12,6 +12,7 @@ import { Hono } from 'hono';
 import type pg from 'pg';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { AuthError } from '@heroku-mcp/core';
 import type { AppEnv } from '../auth/middleware.js';
 import { ReauthRequiredError, resolveUserAccessToken } from '../oauth/flow.js';
 import type { HerokuOAuthConfig } from '../oauth/heroku.js';
@@ -83,14 +84,41 @@ export function buildMcpRoutes(deps: McpRouteDeps): Hono<AppEnv> {
           400,
         );
       }
-      // Resolve this user's Heroku access token, refreshing it first if the
-      // stored token is past (or near) its 8-hour TTL. If decryption fails,
-      // the server's master key probably doesn't match what encrypted the
-      // row. If refresh itself fails because Heroku rejected the refresh
-      // token, the user has to re-authenticate.
-      let accessToken: string;
+      // Build a per-request token getter. `resolveUserAccessToken` checks
+      // expiry and refreshes via the stored refresh token when needed, so
+      // calling it on every Heroku request keeps a long-lived MCP session
+      // alive past the ~8h access-token TTL. ReauthRequiredError from
+      // mid-session calls is wrapped into a core AuthError so the tool
+      // envelope renders as kind:'auth' with code:'reauth_required' (rather
+      // than the generic kind:'server' that a bare Error would produce).
+      const userId = auth.user.id;
+      const signInUrl = `${deps.cfg.publicUrl}/sign-in`;
+      const getAccessToken = async (): Promise<string> => {
+        try {
+          return await resolveUserAccessToken(
+            deps.pool,
+            userId,
+            deps.cfg.masterKey,
+            deps.oauthCfg,
+          );
+        } catch (err) {
+          if (err instanceof ReauthRequiredError) {
+            throw new AuthError(err.message, {
+              details: { code: err.code, signInUrl },
+              cause: err,
+            });
+          }
+          throw err;
+        }
+      };
+
+      // Fail-fast at session creation: a user whose refresh token is dead
+      // should get a clean HTTP 401 envelope from initialize, not a session
+      // that succeeds and then collapses on the first tool call. Resolving
+      // once here also warms the row (subsequent getter calls within ~8h
+      // return the cached fresh token without refreshing again).
       try {
-        accessToken = await resolveUserAccessToken(
+        await resolveUserAccessToken(
           deps.pool,
           auth.user.id,
           deps.cfg.masterKey,
@@ -105,7 +133,7 @@ export function buildMcpRoutes(deps: McpRouteDeps): Hono<AppEnv> {
                 kind: 'auth',
                 code: err.code,
                 message: err.message,
-                signInUrl: `${deps.cfg.publicUrl}/sign-in`,
+                signInUrl,
               },
             },
             401,
@@ -126,7 +154,7 @@ export function buildMcpRoutes(deps: McpRouteDeps): Hono<AppEnv> {
 
       const sessionId = generateSessionId();
       const built = await buildSessionMcp({
-        accessToken,
+        getAccessToken,
         tokenFingerprint,
         auditSink: dbAuditSink(deps.pool),
         getAuditContext: () => ({
