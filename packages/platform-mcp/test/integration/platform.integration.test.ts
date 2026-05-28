@@ -103,6 +103,34 @@ describeLive('platform-mcp ↔ live api.heroku.com', () => {
         }
       }
     }
+
+    if (names.includes('apps_list_all')) {
+      // Unfiltered apps_list (no Range slice) so the count comparison is fair.
+      const personalResult = (await client.callTool({
+        name: 'apps_list',
+        arguments: {},
+      })) as { content: unknown[] };
+      const personalEnv = parseEnv<{ id: string }[]>(personalResult);
+      const personalCount = personalEnv.data?.length ?? 0;
+
+      const allResult = (await client.callTool({
+        name: 'apps_list_all',
+        arguments: {},
+      })) as { content: unknown[] };
+      const allEnv = parseEnv<{
+        apps: { id: string }[];
+        summary: { personal_count: number; team_count: number; total_unique: number };
+      }>(allResult);
+      expect(allEnv.ok).toBe(true);
+      // The union must include at least every app from apps_list.
+      const allIds = new Set((allEnv.data?.apps ?? []).map((a) => a.id));
+      for (const a of personalEnv.data ?? []) {
+        expect(allIds.has(a.id)).toBe(true);
+      }
+      // Sanity: when the user belongs to teams, total_unique should be >=
+      // personal_count.
+      expect(allEnv.data?.summary.total_unique).toBeGreaterThanOrEqual(personalCount);
+    }
   }, 60_000);
 
   it('walks the Phase 2a write lifecycle (create → mutate → dry_run delete → delete)', async () => {

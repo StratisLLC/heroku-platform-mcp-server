@@ -13,6 +13,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ok, paginationInputShape, rangeHeader, runTool } from '../tool-helpers.js';
 import type { HerokuList, HerokuRecord } from '../tool-helpers.js';
 import type { ToolContext } from '../context.js';
+import { envelopeFromLocal } from '../envelope.js';
 
 const appInput = {
   app: z.string().min(1).describe('App id or name. Prefer UUID when known.'),
@@ -87,6 +88,16 @@ const transferIdInput = {
 
 const url = (s: string): string => encodeURIComponent(s);
 
+function idOf(app: HerokuRecord): string | null {
+  const id = app.id;
+  return typeof id === 'string' && id.length > 0 ? id : null;
+}
+
+function nameOf(app: HerokuRecord): string {
+  const n = app.name;
+  return typeof n === 'string' ? n : '';
+}
+
 /** Register read-only apps-tier tools onto the server. */
 export function registerAppsTools(server: McpServer, ctx: ToolContext): void {
   // --------------------------------------------------------------------------
@@ -97,7 +108,8 @@ export function registerAppsTools(server: McpServer, ctx: ToolContext): void {
     'apps_list',
     {
       title: 'Apps list',
-      description: 'List apps accessible to the authenticated user. Paginated. Wraps GET /apps.',
+      description:
+        'List apps accessible to the authenticated user. Paginated. Wraps GET /apps. Returns only apps you have direct access to (personal + explicit collaborator). Does NOT include all team apps. Use apps_list_all for the full union across all your teams, or team_apps_list for a specific team.',
       inputSchema: { ...paginationInputShape },
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
@@ -108,6 +120,97 @@ export function registerAppsTools(server: McpServer, ctx: ToolContext): void {
           headers: { Range: rangeHeader(input) },
         });
         return ok(res);
+      }),
+  );
+
+  server.registerTool(
+    'apps_list_all',
+    {
+      title: 'Apps list (all, including teams)',
+      description:
+        'Return the union of every Heroku app the authenticated user can access — personal apps, collaborator apps, AND apps owned by every team the user belongs to. Equivalent to `heroku apps:list --all`. Makes N+1 API calls (one for /apps, one for /teams, one per team). Slow for users in many teams; prefer apps_list or team_apps_list when you know exactly what slice you want. Returns `{apps, summary}` where summary carries personal_count, team_count, teams_queried, failed_teams, total_unique.',
+      inputSchema: { ...paginationInputShape },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    (input) =>
+      runTool(async () => {
+        // 1. Personal apps (the only paginated call — caller may slice).
+        const personalRes = await ctx.client.get<HerokuList>('/apps', {
+          tool: 'apps_list_all',
+          headers: { Range: rangeHeader(input) },
+        });
+        const personalApps = personalRes.body ?? [];
+
+        // 2. Teams the user belongs to. Pull a full page (max 1000) since
+        //    we have no way to recurse here.
+        let teams: HerokuList = [];
+        try {
+          const teamsRes = await ctx.client.get<HerokuList>('/teams', {
+            tool: 'apps_list_all',
+            headers: { Range: rangeHeader({ page_size: 1000 }) },
+          });
+          teams = teamsRes.body ?? [];
+        } catch {
+          // No teams access (403/404 etc.) is fine — return just personal.
+          teams = [];
+        }
+
+        // 3. Team apps in parallel; failures recorded, not thrown.
+        const failedTeams: { name: string; reason: string }[] = [];
+        const teamAppLists = await Promise.all(
+          teams.map(async (t) => {
+            const name = typeof t.name === 'string' ? t.name : String(t.id ?? '');
+            if (!name) return [];
+            try {
+              const res = await ctx.client.get<HerokuList>(
+                `/teams/${encodeURIComponent(name)}/apps`,
+                {
+                  tool: 'apps_list_all',
+                  headers: { Range: rangeHeader({ page_size: 1000 }) },
+                },
+              );
+              return res.body ?? [];
+            } catch (err) {
+              failedTeams.push({
+                name,
+                reason: err instanceof Error ? err.message : String(err),
+              });
+              return [];
+            }
+          }),
+        );
+
+        // 4. Dedupe by id, sort deterministically by (name, id).
+        const byId = new Map<string, HerokuRecord>();
+        for (const app of personalApps) {
+          const id = idOf(app);
+          if (id) byId.set(id, app);
+        }
+        for (const list of teamAppLists) {
+          for (const app of list) {
+            const id = idOf(app);
+            if (id && !byId.has(id)) byId.set(id, app);
+          }
+        }
+        const apps = [...byId.values()].sort((a, b) => {
+          const na = nameOf(a);
+          const nb = nameOf(b);
+          if (na !== nb) return na < nb ? -1 : 1;
+          const ia = idOf(a) ?? '';
+          const ib = idOf(b) ?? '';
+          return ia < ib ? -1 : ia > ib ? 1 : 0;
+        });
+
+        return envelopeFromLocal({
+          apps,
+          summary: {
+            personal_count: personalApps.length,
+            team_count: teams.length,
+            teams_queried: teams.length,
+            failed_teams: failedTeams,
+            total_unique: apps.length,
+          },
+        });
       }),
   );
 

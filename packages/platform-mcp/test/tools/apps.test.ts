@@ -27,6 +27,7 @@ describe('apps-tier tools', () => {
     expect(names).toEqual(
       expect.arrayContaining([
         'apps_list',
+        'apps_list_all',
         'apps_list_owned',
         'apps_info',
         'apps_filter',
@@ -142,6 +143,245 @@ describe('apps-tier tools', () => {
     expect(calls[0]?.method).toBe('POST');
     expect(calls[0]?.headers.range).toBe('id ..; max=50');
     expect(JSON.parse(calls[0]?.body ?? '{}')).toEqual({ in: { id: ['a-1', 'a-2'] } });
+  });
+
+  it('apps_list description warns that team apps are NOT included', async () => {
+    const { client } = await spinUpServer({ capabilities: appsOnly });
+    const list = await client.listTools();
+    const apps_list = list.tools.find((t) => t.name === 'apps_list');
+    expect(apps_list?.description).toMatch(/Does NOT include all team apps/);
+    expect(apps_list?.description).toMatch(/apps_list_all/);
+  });
+
+  it('apps_list_all returns personal apps only when the user has no teams', async () => {
+    const { client, calls } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        {
+          match: (url) => url === 'https://api.heroku.com/apps',
+          body: [{ id: 'a-1', name: 'demo' }],
+        },
+        {
+          match: (url) => url === 'https://api.heroku.com/teams',
+          body: [],
+        },
+      ],
+    });
+    const result = (await client.callTool({ name: 'apps_list_all', arguments: {} })) as {
+      content: unknown[];
+    };
+    const env = parseEnvelope<{
+      apps: { id: string; name: string }[];
+      summary: {
+        personal_count: number;
+        team_count: number;
+        teams_queried: number;
+        failed_teams: { name: string; reason: string }[];
+        total_unique: number;
+      };
+    }>(result);
+    expect(env.ok).toBe(true);
+    expect(env.data?.apps.map((a) => a.id)).toEqual(['a-1']);
+    expect(env.data?.summary).toEqual({
+      personal_count: 1,
+      team_count: 0,
+      teams_queried: 0,
+      failed_teams: [],
+      total_unique: 1,
+    });
+    // Two calls: /apps + /teams (no team-apps calls).
+    expect(calls.map((c) => c.url)).toEqual([
+      'https://api.heroku.com/apps',
+      'https://api.heroku.com/teams',
+    ]);
+  });
+
+  it('apps_list_all merges personal + team apps, dedupes by id, sorts deterministically', async () => {
+    const { client, calls } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        {
+          match: (url) => url === 'https://api.heroku.com/apps',
+          // Personal: includes one app that is ALSO owned by team eng.
+          body: [
+            { id: 'a-2', name: 'beta' },
+            { id: 'a-shared', name: 'shared' },
+          ],
+        },
+        {
+          match: (url) => url === 'https://api.heroku.com/teams',
+          body: [
+            { id: 't1', name: 'eng' },
+            { id: 't2', name: 'ops' },
+          ],
+        },
+        {
+          match: (url) => url === 'https://api.heroku.com/teams/eng/apps',
+          // Different copy of the shared app — should appear once in the union.
+          body: [
+            { id: 'a-shared', name: 'shared' },
+            { id: 'a-3', name: 'gamma' },
+          ],
+        },
+        {
+          match: (url) => url === 'https://api.heroku.com/teams/ops/apps',
+          body: [{ id: 'a-1', name: 'alpha' }],
+        },
+      ],
+    });
+    const result = (await client.callTool({ name: 'apps_list_all', arguments: {} })) as {
+      content: unknown[];
+    };
+    const env = parseEnvelope<{
+      apps: { id: string; name: string }[];
+      summary: { personal_count: number; team_count: number; total_unique: number };
+    }>(result);
+    expect(env.ok).toBe(true);
+    // 4 unique apps after dedupe (a-shared collapsed to one).
+    expect(env.data?.apps).toHaveLength(4);
+    // Sorted by name then id.
+    expect(env.data?.apps.map((a) => a.name)).toEqual(['alpha', 'beta', 'gamma', 'shared']);
+    expect(env.data?.summary).toMatchObject({
+      personal_count: 2,
+      team_count: 2,
+      teams_queried: 2,
+      total_unique: 4,
+    });
+
+    // Order independence: shuffle the same response stub and assert identical
+    // output.
+    const { client: client2 } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        {
+          match: (url) => url === 'https://api.heroku.com/apps',
+          body: [
+            { id: 'a-shared', name: 'shared' },
+            { id: 'a-2', name: 'beta' },
+          ],
+        },
+        {
+          match: (url) => url === 'https://api.heroku.com/teams',
+          body: [
+            { id: 't2', name: 'ops' },
+            { id: 't1', name: 'eng' },
+          ],
+        },
+        {
+          match: (url) => url === 'https://api.heroku.com/teams/eng/apps',
+          body: [
+            { id: 'a-3', name: 'gamma' },
+            { id: 'a-shared', name: 'shared' },
+          ],
+        },
+        {
+          match: (url) => url === 'https://api.heroku.com/teams/ops/apps',
+          body: [{ id: 'a-1', name: 'alpha' }],
+        },
+      ],
+    });
+    const result2 = (await client2.callTool({ name: 'apps_list_all', arguments: {} })) as {
+      content: unknown[];
+    };
+    const env2 = parseEnvelope<{ apps: { id: string; name: string }[] }>(result2);
+    expect(env2.data?.apps.map((a) => a.id)).toEqual(env.data?.apps.map((a) => a.id));
+
+    // Single-team-with-no-apps case is implicit in this test (each team has
+    // apps); covered separately below.
+    expect(calls.some((c) => c.url === 'https://api.heroku.com/teams/eng/apps')).toBe(true);
+  });
+
+  it('apps_list_all handles a team with zero apps', async () => {
+    const { client } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        { match: (u) => u === 'https://api.heroku.com/apps', body: [{ id: 'a-1', name: 'x' }] },
+        { match: (u) => u === 'https://api.heroku.com/teams', body: [{ id: 't1', name: 'eng' }] },
+        { match: (u) => u === 'https://api.heroku.com/teams/eng/apps', body: [] },
+      ],
+    });
+    const result = (await client.callTool({ name: 'apps_list_all', arguments: {} })) as {
+      content: unknown[];
+    };
+    const env = parseEnvelope<{
+      apps: unknown[];
+      summary: { team_count: number; teams_queried: number; total_unique: number };
+    }>(result);
+    expect(env.data?.apps).toHaveLength(1);
+    expect(env.data?.summary).toMatchObject({
+      team_count: 1,
+      teams_queried: 1,
+      total_unique: 1,
+    });
+  });
+
+  it('apps_list_all records failed team calls in summary.failed_teams; others still succeed', async () => {
+    const { client } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        { match: (u) => u === 'https://api.heroku.com/apps', body: [] },
+        {
+          match: (u) => u === 'https://api.heroku.com/teams',
+          body: [
+            { id: 't1', name: 'eng' },
+            { id: 't2', name: 'ops' },
+          ],
+        },
+        // eng's team-apps call fails with 500.
+        {
+          match: (u) => u === 'https://api.heroku.com/teams/eng/apps',
+          status: 500,
+          body: { id: 'internal_server_error', message: 'kaboom' },
+        },
+        // ops's call succeeds.
+        {
+          match: (u) => u === 'https://api.heroku.com/teams/ops/apps',
+          body: [{ id: 'a-1', name: 'alpha' }],
+        },
+      ],
+    });
+    const result = (await client.callTool({ name: 'apps_list_all', arguments: {} })) as {
+      content: unknown[];
+    };
+    const env = parseEnvelope<{
+      apps: { name: string }[];
+      summary: {
+        failed_teams: { name: string; reason: string }[];
+        teams_queried: number;
+        total_unique: number;
+      };
+    }>(result);
+    expect(env.ok).toBe(true);
+    expect(env.data?.apps.map((a) => a.name)).toEqual(['alpha']);
+    expect(env.data?.summary.failed_teams).toHaveLength(1);
+    expect(env.data?.summary.failed_teams[0]?.name).toBe('eng');
+    expect(env.data?.summary.teams_queried).toBe(2);
+    expect(env.data?.summary.total_unique).toBe(1);
+  });
+
+  it('apps_list_all returns just personal apps when /teams itself is forbidden', async () => {
+    const { client } = await spinUpServer({
+      capabilities: appsOnly,
+      responses: [
+        { match: (u) => u === 'https://api.heroku.com/apps', body: [{ id: 'a-1', name: 'alpha' }] },
+        // /teams returns 403 — should be treated as "no teams" without aborting.
+        {
+          match: (u) => u === 'https://api.heroku.com/teams',
+          status: 403,
+          body: { id: 'forbidden', message: 'no team access' },
+        },
+      ],
+    });
+    const result = (await client.callTool({ name: 'apps_list_all', arguments: {} })) as {
+      content: unknown[];
+    };
+    const env = parseEnvelope<{
+      apps: { name: string }[];
+      summary: { team_count: number };
+    }>(result);
+    expect(env.ok).toBe(true);
+    expect(env.data?.apps.map((a) => a.name)).toEqual(['alpha']);
+    expect(env.data?.summary.team_count).toBe(0);
   });
 
   it('omits apps tools when the apps tier is unavailable', async () => {

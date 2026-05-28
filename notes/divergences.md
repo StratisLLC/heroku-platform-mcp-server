@@ -466,3 +466,11 @@ figure in PHASE-4.5.md's table conflated unit-test files and e2e files.
 **Observation:** Heroku's /oauth/token endpoint returns user_id and session_nonce as literal null for some authorization flows (notably the post-PKCE authorization-code grant we use). Zod's .optional() accepts undefined but rejects null. The fix is .nullish() which accepts both. This was discovered during Phase 4 debug, lost during Phase 4.5 refactor, re-discovered during Phase 4.5 smoke test. Regression test added in packages/http-server/test/oauth.test.ts to prevent a fourth occurrence.
 
 **Rule for the future:** Any Zod schema that parses third-party API responses where a field might be omitted OR null should default to .nullish() rather than .optional(). Reserve .optional() for cases where the API contract guarantees the field is either present-with-value or absent entirely.
+
+## 67. Phase 4.5 cleanup — apps_list returns only personal+collaborator apps, not team apps
+
+**Observation:** Heroku's GET /apps endpoint returns apps the user has direct access to (personal + explicit collaborators) but NOT apps in teams the user is a member of. A user in 25 teams might see ~74 apps from apps_list when they actually have access to ~500. The heroku apps:list --all CLI command does client-side union work: it calls /apps plus /teams/{name}/apps for every team, then dedupes.
+
+**Resolution:** apps_list description updated to make this honest. New apps_list_all meta-tool added that does the same union the CLI does. Tradeoff is N+1 API calls (slow, ~5-10 sec for a user in 25 teams). Both tools coexist: apps_list for fast partial lookups, apps_list_all when the user explicitly wants everything.
+
+**Rule for the future:** Any tool wrapping a single Heroku endpoint where the endpoint's name suggests broader semantics than it actually delivers should have its description explicitly call out what's NOT included. "Returns X" should be replaced with "Returns X. Does NOT include Y."

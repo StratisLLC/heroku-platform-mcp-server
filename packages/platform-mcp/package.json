@@ -1,6 +1,6 @@
 {
   "name": "@heroku-mcp/platform",
-  "version": "0.0.0",
+  "version": "0.5.1",
   "description": "Customer-facing Heroku Platform MCP server (stdio). Phase 1: account + apps tiers, read-only.",
   "license": "Apache-2.0",
   "type": "module",
