@@ -38,12 +38,19 @@ const Env = z.object({
   HEROKUMCP_OAUTH_CLIENT_SECRET: z.string().min(1, 'HEROKUMCP_OAUTH_CLIENT_SECRET is required'),
   HEROKUMCP_ADMIN_CONTACT: z.string().min(1, 'HEROKUMCP_ADMIN_CONTACT is required'),
   HEROKUMCP_OAUTH_SCOPE: z.string().default('write-protected'),
+  // Optional in the schema: when unset we auto-detect it from Heroku Dyno
+  // Metadata (see resolvePublicUrl). When present it must carry a scheme.
   HEROKUMCP_PUBLIC_URL: z
     .string()
-    .min(1, 'HEROKUMCP_PUBLIC_URL is required (e.g. https://herokumcp.example.com)')
+    .min(1)
     .refine((s) => /^https?:\/\//.test(s), {
       message: 'HEROKUMCP_PUBLIC_URL must start with http:// or https://',
-    }),
+    })
+    .optional(),
+  // Injected by Heroku Dyno Metadata (Heroku Labs, opt-in). Used to derive
+  // HEROKUMCP_PUBLIC_URL when the operator didn't set it explicitly.
+  HEROKU_APP_DEFAULT_DOMAIN_NAME: z.string().optional(),
+  HEROKU_APP_NAME: z.string().optional(),
   MCP_ALLOWED_EMAILS: z.string().optional(),
   MCP_ALLOWED_TEAMS: z.string().optional(),
   MCP_ADMIN_EMAILS: z.string().optional(),
@@ -95,6 +102,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
   const e = parsed.data;
 
+  const publicUrl = resolvePublicUrl(e);
+
   const masterKey = loadMasterKeyFromBase64(e.HEROKUMCP_MASTER_KEY);
 
   const allowedEmails = parseCommaList(e.MCP_ALLOWED_EMAILS)?.map(normalizeEmail) ?? null;
@@ -104,7 +113,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const cfg: Config = {
     port: e.PORT,
     isProduction: (e.NODE_ENV ?? '').toLowerCase() === 'production',
-    publicUrl: trimSlash(e.HEROKUMCP_PUBLIC_URL)!,
+    publicUrl: trimSlash(publicUrl)!,
     databaseUrl: e.DATABASE_URL,
     dbPoolMax: e.HEROKUMCP_DB_POOL_MAX,
     dbSsl: e.HEROKUMCP_DB_SSL,
@@ -126,6 +135,39 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     rawEnvForAdmin: snapshotForAdmin(env),
   };
   return cfg;
+}
+
+/**
+ * Resolve the external base URL the server advertises (OAuth metadata, callback
+ * URLs, .well-known docs). Precedence:
+ *
+ *   1. HEROKUMCP_PUBLIC_URL — explicit operator override always wins.
+ *   2. HEROKU_APP_DEFAULT_DOMAIN_NAME — Heroku Dyno Metadata. Includes the full
+ *      randomized suffix Heroku now assigns (e.g. app-5fc113ad890b.herokuapp.com),
+ *      so it's correct even on Button deploys where the operator can't predict it.
+ *   3. HEROKU_APP_NAME — legacy-style guess (app.herokuapp.com). Only correct for
+ *      older apps without a suffixed default domain, but better than failing.
+ *
+ * Heroku Dyno Metadata is opt-in (`heroku labs:enable runtime-dyno-metadata`),
+ * so when none of the above are present we fail with an actionable message.
+ */
+function resolvePublicUrl(e: EnvOutput): string {
+  if (e.HEROKUMCP_PUBLIC_URL) {
+    return e.HEROKUMCP_PUBLIC_URL;
+  }
+  if (e.HEROKU_APP_DEFAULT_DOMAIN_NAME) {
+    return `https://${e.HEROKU_APP_DEFAULT_DOMAIN_NAME}`;
+  }
+  if (e.HEROKU_APP_NAME) {
+    return `https://${e.HEROKU_APP_NAME}.herokuapp.com`;
+  }
+  throw new Error(
+    'Invalid environment:\n' +
+      '  - HEROKUMCP_PUBLIC_URL is not set and could not be auto-detected from Heroku Dyno Metadata.\n' +
+      '    Either set HEROKUMCP_PUBLIC_URL explicitly (e.g. https://herokumcp.example.com),\n' +
+      '    or enable Heroku Labs Dyno Metadata and redeploy:\n' +
+      '      heroku labs:enable runtime-dyno-metadata -a <appname>',
+  );
 }
 
 function parseCommaList(s: string | undefined): string[] | undefined {

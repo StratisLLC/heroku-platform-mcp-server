@@ -95,4 +95,37 @@ describe('loadConfig', () => {
     const cfg = loadConfig({ ...baseEnv(), HEROKUMCP_PUBLIC_URL: 'https://srv.example/' });
     expect(cfg.publicUrl).toBe('https://srv.example');
   });
+
+  it('auto-detects publicUrl from HEROKU_APP_DEFAULT_DOMAIN_NAME when unset', () => {
+    const env = baseEnv();
+    delete env.HEROKUMCP_PUBLIC_URL;
+    const cfg = loadConfig({
+      ...env,
+      HEROKU_APP_DEFAULT_DOMAIN_NAME: 'myapp-5fc113ad890b.herokuapp.com',
+    });
+    expect(cfg.publicUrl).toBe('https://myapp-5fc113ad890b.herokuapp.com');
+  });
+
+  it('auto-detects publicUrl from HEROKU_APP_NAME as a legacy fallback', () => {
+    const env = baseEnv();
+    delete env.HEROKUMCP_PUBLIC_URL;
+    const cfg = loadConfig({ ...env, HEROKU_APP_NAME: 'myapp' });
+    expect(cfg.publicUrl).toBe('https://myapp.herokuapp.com');
+  });
+
+  it('prefers an explicit HEROKUMCP_PUBLIC_URL over Heroku-injected metadata', () => {
+    const cfg = loadConfig({
+      ...baseEnv(),
+      HEROKUMCP_PUBLIC_URL: 'https://explicit.example.com',
+      HEROKU_APP_DEFAULT_DOMAIN_NAME: 'myapp-5fc113ad890b.herokuapp.com',
+      HEROKU_APP_NAME: 'myapp',
+    });
+    expect(cfg.publicUrl).toBe('https://explicit.example.com');
+  });
+
+  it('error message points at dyno metadata when nothing is set', () => {
+    const env = baseEnv();
+    delete env.HEROKUMCP_PUBLIC_URL;
+    expect(() => loadConfig(env)).toThrow(/runtime-dyno-metadata/);
+  });
 });
