@@ -14,7 +14,7 @@ import { buildApp } from './app.js';
 import type { HerokuOAuthConfig } from './oauth/heroku.js';
 import { pruneAuditEntries } from './db/repos/audit-log.js';
 
-export const PACKAGE_VERSION = '0.2.3';
+export const PACKAGE_VERSION = '0.2.4';
 
 export async function main(): Promise<void> {
   const cfg = loadConfig();
