@@ -11,24 +11,48 @@ export interface PoolOptions {
   databaseUrl: string;
   max?: number;
   /**
-   *  - `require`    enable TLS, verify the cert
-   *  - `no-verify`  enable TLS, accept self-signed (Heroku Postgres uses this)
+   *  - `require`    enable TLS; verify the cert, but auto-relax issuer
+   *                 verification for Heroku-managed (AWS-hosted) Postgres
+   *                 whose CA isn't in Node's trust store (see resolveSslConfig)
+   *  - `no-verify`  enable TLS, accept self-signed (force-relax everywhere)
    *  - `off`        no TLS (local docker only)
    */
   ssl?: 'require' | 'no-verify' | 'off';
 }
 
+/**
+ * Heroku provisions Postgres on AWS RDS (`*.amazonaws.com`) and presents a
+ * certificate signed by a CA that isn't in Node's default trust store. With
+ * strict verification the connection fails with "unable to get local issuer
+ * certificate". `sslmode=disable` isn't an option either — Heroku Postgres
+ * enforces SSL. The accepted remediation is to keep TLS on but skip issuer
+ * verification (the channel is still encrypted in transit).
+ */
+export function isAwsHostedPostgres(databaseUrl: string): boolean {
+  try {
+    // `.amazonaws.com` also covers the `.compute-1.amazonaws.com` form.
+    return new URL(databaseUrl).hostname.endsWith('.amazonaws.com');
+  } catch {
+    return false;
+  }
+}
+
+/** Resolve pg's `ssl` option from the mode + connection string. An explicit
+ *  `off`/`no-verify` always wins; the default `require` verifies the issuer
+ *  except for AWS-hosted Postgres, where it relaxes verification automatically
+ *  so a fresh Heroku deploy connects without manual config. */
+export function resolveSslConfig(opts: PoolOptions): false | { rejectUnauthorized: boolean } {
+  if (opts.ssl === 'off') return false;
+  if (opts.ssl === 'no-verify') return { rejectUnauthorized: false };
+  if (isAwsHostedPostgres(opts.databaseUrl)) return { rejectUnauthorized: false };
+  return { rejectUnauthorized: true };
+}
+
 export function createPool(opts: PoolOptions): pg.Pool {
-  const sslConfig =
-    opts.ssl === 'off'
-      ? false
-      : opts.ssl === 'no-verify'
-        ? { rejectUnauthorized: false }
-        : { rejectUnauthorized: true };
   return new pg.Pool({
     connectionString: opts.databaseUrl,
     max: opts.max ?? 10,
-    ssl: sslConfig,
+    ssl: resolveSslConfig(opts),
   });
 }
 
