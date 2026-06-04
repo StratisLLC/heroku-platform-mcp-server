@@ -47,7 +47,7 @@ Restart Claude Desktop after saving. The MCP entry will show as failed until the
 ## The prompt to paste
 
 ```
-Phase 0 is complete and tagged at core-v0.1.0. packages/core is built, tested (227 unit tests + a live integration test against api.heroku.com), linted, formatted, and pushed to github.com/baliles/herokumcp with CI passing on Node 20 and 22.
+Phase 0 is complete and tagged at core-v0.1.0. packages/core is built, tested (227 unit tests + a live integration test against api.heroku.com), linted, formatted, and pushed to github.com/StratisLLC/heroku-platform-mcp-server with CI passing on Node 20 and 22.
 
 Begin Phase 1 per ARCHITECTURE.md §15: implement packages/platform-mcp end-to-end for the account and apps tiers, read-only, stdio transport only.
 
@@ -183,7 +183,7 @@ Begin.
 
 Probably 30-60 minutes of agent time. Useful background tasks:
 
-1. **Open the GitHub repo in your browser** — `https://github.com/baliles/herokumcp/actions` — to watch CI runs as Claude Code pushes commits.
+1. **Open the GitHub repo in your browser** — `https://github.com/StratisLLC/heroku-platform-mcp-server/actions` — to watch CI runs as Claude Code pushes commits.
 2. **Skim AUTH.md and DEPLOYMENT.md** if you haven't already. You won't need them for Phase 1, but Phase 4 will lean heavily on them and prior familiarity helps.
 3. **Confirm the Heroku test account has enough surface.** If `heroku apps` shows zero apps, create one now:
    ```bash

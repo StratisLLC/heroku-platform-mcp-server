@@ -39,7 +39,7 @@ export interface ProtectedResourceMetadata {
   resource_documentation: string;
 }
 
-const SERVICE_DOC_URL = 'https://github.com/baliles/herokumcp';
+const SERVICE_DOC_URL = 'https://github.com/StratisLLC/heroku-platform-mcp-server';
 
 export function buildAuthorizationServerMetadata(
   publicUrl: string,

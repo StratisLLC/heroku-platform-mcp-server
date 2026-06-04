@@ -3,7 +3,7 @@
 **Status:** Design locked, ready for implementation
 **Predecessor:** `http-server-v0.1.0` (Phase 4)
 **Successor tag:** `http-server-v0.2.0`
-**Repo:** `github.com/baliles/herokumcp` (will move to Stratis Global)
+**Repo:** `github.com/StratisLLC/heroku-platform-mcp-server` (will move to Stratis Global)
 
 ---
 
@@ -275,7 +275,7 @@ Both paths converge at the middleware: lookup by `SHA-256(token)` against either
   "code_challenge_methods_supported": ["S256"],
   "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
   "scopes_supported": [],
-  "service_documentation": "https://github.com/baliles/herokumcp"
+  "service_documentation": "https://github.com/StratisLLC/heroku-platform-mcp-server"
 }
 ```
 
@@ -286,7 +286,7 @@ Both paths converge at the middleware: lookup by `SHA-256(token)` against either
   "resource": "https://<server>/mcp",
   "authorization_servers": ["https://<server>"],
   "bearer_methods_supported": ["header"],
-  "resource_documentation": "https://github.com/baliles/herokumcp"
+  "resource_documentation": "https://github.com/StratisLLC/heroku-platform-mcp-server"
 }
 ```
 

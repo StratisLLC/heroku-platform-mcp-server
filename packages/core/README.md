@@ -1,8 +1,8 @@
 # @heroku-mcp/core
 
-Shared library powering [herokumcp](https://github.com/baliles/herokumcp): the HTTP client, schema discovery, capability probing, encrypted token storage, structured error types, audit logging, and secret redaction used by both `@heroku-mcp/platform` and `@heroku-mcp/partner`.
+Shared library powering [herokumcp](https://github.com/StratisLLC/heroku-platform-mcp-server): the HTTP client, schema discovery, capability probing, encrypted token storage, structured error types, audit logging, and secret redaction used by both `@heroku-mcp/platform` and `@heroku-mcp/partner`.
 
-> This is a workspace-internal package. Most users will install `@heroku-mcp/platform` instead, which depends on this library. Direct consumers of `@heroku-mcp/core` should read [the architecture doc](https://github.com/baliles/herokumcp/blob/main/ARCHITECTURE.md) for context.
+> This is a workspace-internal package. Most users will install `@heroku-mcp/platform` instead, which depends on this library. Direct consumers of `@heroku-mcp/core` should read [the architecture doc](https://github.com/StratisLLC/heroku-platform-mcp-server/blob/main/ARCHITECTURE.md) for context.
 
 ## Install
 
@@ -73,10 +73,10 @@ pnpm test:integration  # 2 live tests against api.heroku.com (requires HEROKUMCP
 
 ## Documentation
 
-- [Architecture](https://github.com/baliles/herokumcp/blob/main/ARCHITECTURE.md) — overall design
-- [Capability probes](https://github.com/baliles/herokumcp/blob/main/CAPABILITY_PROBES.md) — the probe matrix
-- [Auth](https://github.com/baliles/herokumcp/blob/main/AUTH.md) — token storage and OAuth design
+- [Architecture](https://github.com/StratisLLC/heroku-platform-mcp-server/blob/main/ARCHITECTURE.md) — overall design
+- [Capability probes](https://github.com/StratisLLC/heroku-platform-mcp-server/blob/main/CAPABILITY_PROBES.md) — the probe matrix
+- [Auth](https://github.com/StratisLLC/heroku-platform-mcp-server/blob/main/AUTH.md) — token storage and OAuth design
 
 ## License
 
-[Apache-2.0](https://github.com/baliles/herokumcp/blob/main/LICENSE).
+[Apache-2.0](https://github.com/StratisLLC/heroku-platform-mcp-server/blob/main/LICENSE).

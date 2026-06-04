@@ -2,7 +2,7 @@
 
 MCP server exposing the [Heroku Platform API](https://devcenter.heroku.com/articles/platform-api-reference) as tools for AI clients like Claude Desktop and Claude Code.
 
-Part of [herokumcp](https://github.com/baliles/herokumcp). For full documentation, deployment guides, and the broader project context, see the main repo.
+Part of [herokumcp](https://github.com/StratisLLC/heroku-platform-mcp-server). For full documentation, deployment guides, and the broader project context, see the main repo.
 
 ## Install
 
@@ -45,7 +45,7 @@ Restart Claude Desktop, then in a new conversation: *"What Heroku apps do I have
 
 ## Usage — HTTP (for hosted deployments)
 
-The HTTP transport, sign-in flow, encrypted token storage, and Heroku Button deployment are introduced in Phase 4 and 5 of the project. *Not yet shipped.* See [the roadmap](https://github.com/baliles/herokumcp#roadmap).
+The HTTP transport, sign-in flow, encrypted token storage, and Heroku Button deployment are introduced in Phase 4 and 5 of the project. *Not yet shipped.* See [the roadmap](https://github.com/StratisLLC/heroku-platform-mcp-server#roadmap).
 
 ## Tool surface
 
@@ -60,7 +60,7 @@ Tools are gated by runtime capability probing — the set you see depends on wha
 | Enterprise / Spaces / Add-ons / Pipelines | *(coming Phase 3)* | *(coming Phase 3)* | 3 |
 | Data (Postgres / Redis / Kafka) | *(coming Phase 9)* | *(coming Phase 9)* | 9 |
 
-Full catalog with parameters and endpoint mappings: [TOOLS.md](https://github.com/baliles/herokumcp/blob/main/TOOLS.md).
+Full catalog with parameters and endpoint mappings: [TOOLS.md](https://github.com/StratisLLC/heroku-platform-mcp-server/blob/main/TOOLS.md).
 
 ## Safety
 
@@ -89,11 +89,11 @@ The MCP server itself never auto-fills `confirm`; the AI client must obtain expl
 
 ## Documentation
 
-- [Main README](https://github.com/baliles/herokumcp) — project overview and quick start
-- [Tools catalog](https://github.com/baliles/herokumcp/blob/main/TOOLS.md)
-- [Architecture](https://github.com/baliles/herokumcp/blob/main/ARCHITECTURE.md)
-- [Capability probes](https://github.com/baliles/herokumcp/blob/main/CAPABILITY_PROBES.md)
+- [Main README](https://github.com/StratisLLC/heroku-platform-mcp-server) — project overview and quick start
+- [Tools catalog](https://github.com/StratisLLC/heroku-platform-mcp-server/blob/main/TOOLS.md)
+- [Architecture](https://github.com/StratisLLC/heroku-platform-mcp-server/blob/main/ARCHITECTURE.md)
+- [Capability probes](https://github.com/StratisLLC/heroku-platform-mcp-server/blob/main/CAPABILITY_PROBES.md)
 
 ## License
 
-[Apache-2.0](https://github.com/baliles/herokumcp/blob/main/LICENSE).
+[Apache-2.0](https://github.com/StratisLLC/heroku-platform-mcp-server/blob/main/LICENSE).

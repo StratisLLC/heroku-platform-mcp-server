@@ -8,7 +8,7 @@ This project follows the [Contributor Covenant](https://www.contributor-covenant
 
 ## Reporting issues
 
-For **bugs and feature requests**, open an issue on [GitHub](https://github.com/baliles/herokumcp/issues). Include:
+For **bugs and feature requests**, open an issue on [GitHub](https://github.com/StratisLLC/heroku-platform-mcp-server/issues). Include:
 
 - What you tried
 - What you expected
@@ -30,7 +30,7 @@ For **security vulnerabilities**, please **do not file a public issue**. See [SE
 ### First-time setup
 
 ```bash
-git clone https://github.com/baliles/herokumcp.git
+git clone https://github.com/StratisLLC/heroku-platform-mcp-server.git
 cd herokumcp
 pnpm install
 pnpm -r build

@@ -1,6 +1,6 @@
 # herokumcp
 
-[![CI](https://github.com/baliles/herokumcp/actions/workflows/ci.yml/badge.svg)](https://github.com/baliles/herokumcp/actions/workflows/ci.yml)
+[![CI](https://github.com/StratisLLC/heroku-platform-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/StratisLLC/heroku-platform-mcp-server/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-green.svg)](https://nodejs.org)
 
@@ -35,7 +35,7 @@ Right now the project supports **local stdio mode** for individual developers. H
 
 ```bash
 # 1. Clone, install, build
-git clone https://github.com/baliles/herokumcp.git
+git clone https://github.com/StratisLLC/heroku-platform-mcp-server.git
 cd herokumcp
 pnpm install
 pnpm -r build
