@@ -28,14 +28,14 @@
   "dependencies": {
     "@heroku-mcp/core": "workspace:*",
     "@heroku-mcp/http-server": "workspace:*",
-    "pg": "^8.13.1",
-    "commander": "^12.1.0"
+    "commander": "^12.1.0",
+    "pg": "^8.13.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",
     "tsup": "^8.3.5",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^3.2.6"
   }
 }
