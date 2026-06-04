@@ -27,7 +27,7 @@
  */
 
 import { z } from 'zod';
-import { loadMasterKeyFromBase64 } from '@heroku-mcp/core';
+import { loadMasterKey } from '@heroku-mcp/core';
 
 const Env = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
@@ -104,7 +104,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
   const publicUrl = resolvePublicUrl(e);
 
-  const masterKey = loadMasterKeyFromBase64(e.HEROKUMCP_MASTER_KEY);
+  const masterKey = loadMasterKey(e.HEROKUMCP_MASTER_KEY);
 
   const allowedEmails = parseCommaList(e.MCP_ALLOWED_EMAILS)?.map(normalizeEmail) ?? null;
   const allowedTeams = parseCommaList(e.MCP_ALLOWED_TEAMS) ?? null;

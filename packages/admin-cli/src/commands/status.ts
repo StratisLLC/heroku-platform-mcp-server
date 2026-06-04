@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import { masterKeyFingerprint, loadMasterKeyFromBase64 } from '@heroku-mcp/core';
+import { masterKeyFingerprint, loadMasterKey } from '@heroku-mcp/core';
 import { openPool } from '../shared/db.js';
 
 export function registerStatusCommand(parent: Command): void {
@@ -39,7 +39,7 @@ export function registerStatusCommand(parent: Command): void {
         const keyB64 = process.env.HEROKUMCP_MASTER_KEY;
         if (keyB64) {
           try {
-            const k = loadMasterKeyFromBase64(keyB64);
+            const k = loadMasterKey(keyB64);
             process.stdout.write(`master_key_fp:   ${masterKeyFingerprint(k)}\n`);
           } catch (err) {
             process.stdout.write(

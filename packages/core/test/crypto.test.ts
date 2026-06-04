@@ -13,6 +13,7 @@ import {
   generateMasterKey,
   IV_LENGTH,
   KEY_LENGTH,
+  loadMasterKey,
   loadMasterKeyFromBase64,
   masterKeyFingerprint,
   TAG_LENGTH,
@@ -131,19 +132,67 @@ describe('encodeForStorage / decodeFromStorage', () => {
   });
 });
 
-describe('loadMasterKeyFromBase64', () => {
+describe('loadMasterKey', () => {
   it('decodes a 32-byte base64 key', () => {
     const raw = randomBytes(KEY_LENGTH);
     const b64 = raw.toString('base64');
-    const k = loadMasterKeyFromBase64(b64);
+    const k = loadMasterKey(b64);
     expect(k.length).toBe(KEY_LENGTH);
     expect(Buffer.from(k).equals(raw)).toBe(true);
   });
 
-  it('rejects wrong-length keys with a helpful message', () => {
+  it('decodes a 32-byte base64 key with padding', () => {
+    const raw = randomBytes(KEY_LENGTH);
+    const b64 = raw.toString('base64');
+    expect(b64.endsWith('=')).toBe(true); // 32 bytes always yields one '=' pad
+    const k = loadMasterKey(b64);
+    expect(Buffer.from(k).equals(raw)).toBe(true);
+  });
+
+  it('decodes a 64-char hex key', () => {
+    const raw = randomBytes(KEY_LENGTH);
+    const hex = raw.toString('hex');
+    expect(hex.length).toBe(64);
+    const k = loadMasterKey(hex);
+    expect(k.length).toBe(KEY_LENGTH);
+    expect(Buffer.from(k).equals(raw)).toBe(true);
+  });
+
+  it('accepts mixed-case hex', () => {
+    const raw = randomBytes(KEY_LENGTH);
+    const hex = raw.toString('hex').toUpperCase();
+    const k = loadMasterKey(hex);
+    expect(Buffer.from(k).equals(raw)).toBe(true);
+  });
+
+  it('trims surrounding whitespace before parsing hex', () => {
+    const raw = randomBytes(KEY_LENGTH);
+    const hex = raw.toString('hex');
+    const k = loadMasterKey(`  ${hex}\n`);
+    expect(Buffer.from(k).equals(raw)).toBe(true);
+  });
+
+  it('does not mistake a 64-char hex string for base64 (would decode to 48 bytes)', () => {
+    // 64 hex chars are also valid base64; as base64 they decode to 48 bytes.
+    // Hex detection must win so the key is the intended 32 bytes.
+    const hex = 'a'.repeat(64);
+    const k = loadMasterKey(hex);
+    expect(k.length).toBe(KEY_LENGTH);
+  });
+
+  it('rejects wrong-length base64 with a helpful message', () => {
     const short = Buffer.from('too short').toString('base64');
-    expect(() => loadMasterKeyFromBase64(short)).toThrow(/HEROKUMCP_MASTER_KEY/);
-    expect(() => loadMasterKeyFromBase64(short)).toThrow(/expected 32/);
+    expect(() => loadMasterKey(short)).toThrow(/HEROKUMCP_MASTER_KEY/);
+    expect(() => loadMasterKey(short)).toThrow(/expected 32/);
+  });
+
+  it('rejects garbage input with the documented error message', () => {
+    expect(() => loadMasterKey('!!! not a key !!!')).toThrow(/HEROKUMCP_MASTER_KEY/);
+    expect(() => loadMasterKey('!!! not a key !!!')).toThrow(/openssl rand -hex/);
+  });
+
+  it('is exported under the legacy loadMasterKeyFromBase64 alias', () => {
+    expect(loadMasterKeyFromBase64).toBe(loadMasterKey);
   });
 });
 

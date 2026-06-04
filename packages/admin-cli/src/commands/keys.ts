@@ -7,7 +7,7 @@
  */
 
 import type { Command } from 'commander';
-import { generateMasterKey, loadMasterKeyFromBase64, masterKeyFingerprint } from '@heroku-mcp/core';
+import { generateMasterKey, loadMasterKey, masterKeyFingerprint } from '@heroku-mcp/core';
 
 export function registerKeysCommands(parent: Command): void {
   const keys = parent.command('keys').description('Master-key utilities.');
@@ -31,7 +31,7 @@ export function registerKeysCommands(parent: Command): void {
         process.exit(2);
       }
       try {
-        const k = loadMasterKeyFromBase64(raw);
+        const k = loadMasterKey(raw);
         process.stdout.write(`${masterKeyFingerprint(k)}\n`);
       } catch (err) {
         process.stderr.write(`bad key: ${err instanceof Error ? err.message : String(err)}\n`);

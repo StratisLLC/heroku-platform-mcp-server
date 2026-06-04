@@ -128,24 +128,45 @@ export function decodeFromStorage(blob: Uint8Array): EnvelopeParts {
 }
 
 /**
- * Parse a base64-encoded master key. Validates length so an operator who
- * pastes a wrong value gets a clear error at startup rather than a confusing
- * decryption failure on the first sign-in.
+ * Parse a 32-byte master key supplied in either hex or base64. We accept both
+ * because operators generate it different ways:
+ *
+ *   - `openssl rand -base64 32`  → 44-char base64 (the documented default)
+ *   - `openssl rand -hex 32`     → 64-char hex
+ *   - Heroku app.json `"generator": "secret"` → 64-char hex
+ *
+ * Hex is detected first (exactly 64 chars from [0-9a-fA-F]) because such a
+ * string is *also* valid base64 and would otherwise mis-decode to 48 bytes.
+ * Length is validated so an operator who pastes a wrong value gets a clear
+ * error at startup rather than a confusing decryption failure on first sign-in.
  */
-export function loadMasterKeyFromBase64(b64: string): Uint8Array {
-  let raw: Buffer;
-  try {
-    raw = Buffer.from(b64, 'base64');
-  } catch {
-    throw new Error('HEROKUMCP_MASTER_KEY: not valid base64.');
+export function loadMasterKey(input: string): Uint8Array {
+  const trimmed = input.trim();
+
+  // Hex: exactly 64 chars (= 32 bytes), only hex digits.
+  if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+    return new Uint8Array(Buffer.from(trimmed, 'hex'));
   }
-  if (raw.length !== KEY_LENGTH) {
+
+  // Otherwise treat as base64. Buffer.from is lenient (it never throws and
+  // silently drops invalid chars), so we lean on the length check to reject
+  // both wrong-length keys and garbage input.
+  const decoded = Buffer.from(trimmed, 'base64');
+  if (decoded.length !== KEY_LENGTH) {
     throw new Error(
-      `HEROKUMCP_MASTER_KEY: decoded length ${raw.length} bytes, expected ${KEY_LENGTH} (generate with \`openssl rand -base64 ${KEY_LENGTH}\`).`,
+      `HEROKUMCP_MASTER_KEY: could not parse as a ${KEY_LENGTH}-byte key ` +
+        `(base64-decoded length ${decoded.length} bytes, expected ${KEY_LENGTH}). ` +
+        `Generate with \`openssl rand -base64 ${KEY_LENGTH}\` or \`openssl rand -hex ${KEY_LENGTH}\`.`,
     );
   }
-  return new Uint8Array(raw);
+  return new Uint8Array(decoded);
 }
+
+/**
+ * @deprecated Use {@link loadMasterKey}, which also accepts hex. Retained as a
+ * thin alias so older imports keep working.
+ */
+export const loadMasterKeyFromBase64 = loadMasterKey;
 
 /** Stable fingerprint for a master key (first 8 hex chars of SHA-256). Used
  *  by /admin/status so operators can verify they're running with the key they
