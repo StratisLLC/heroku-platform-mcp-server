@@ -15,6 +15,7 @@
 The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open standard that lets AI assistants talk to external systems through a uniform interface. This project ships two MCP servers that expose Heroku's APIs as MCP tools:
 
 - **`@heroku-mcp/platform`** — for customers managing their Heroku apps, teams, add-ons, pipelines, spaces, and enterprise accounts
+- **`@heroku-mcp/postgres`** — Heroku Postgres operations (database info, credentials, backups, followers, query insights); registered alongside Platform in the hosted HTTP server
 - **`@heroku-mcp/partner`** — for add-on partners managing their listings, customer resources, and OAuth lifecycle *(planned)*
 
 Both servers share a common core library (`@heroku-mcp/core`) handling HTTP, schema discovery, capability probing, encrypted token storage, and audit logging.
@@ -87,9 +88,12 @@ The currently shipped tool surface (Phases 0–3) covers:
 | **Spaces** | 13 | 10 | Token must have access to ≥1 space |
 | **Add-ons (consumer)** | 16 | 12 | Token must have ≥1 add-on |
 | **Pipelines** | 11 | 11 | Token must have ≥1 pipeline |
-| **Data (Postgres/Key-Value/Kafka)** | *(coming Phase 9)* | *(coming Phase 9)* | Per-add-on |
+| **Data — Postgres** ([`@heroku-mcp/postgres`](packages/postgres-mcp)) | 16 | *(Part B)* | `data.postgres` reachable; per-family sub-tiers |
+| **Data (Key-Value/Kafka)** | *(coming Phase 6.5/6.6)* | *(coming)* | Per-add-on |
 
-**Current total: 240 tools.** Full target after Phase 9: ~280 tools.
+**Current total: 256 tools** (240 Platform + 16 Postgres reads). The hosted HTTP
+server registers Platform and Postgres tools into one merged catalog. Full target
+after Phase 9: ~280 tools.
 
 For the complete tool catalog with parameters and endpoint mappings see [`TOOLS.md`](TOOLS.md).
 
@@ -127,6 +131,7 @@ Most documentation is currently in the repo root and will reorganize into `docs/
 |---|---|---|
 | `@heroku-mcp/core` | `core-v0.1.0` | Phase 0 complete |
 | `@heroku-mcp/platform` | `platform-v0.3.0` | Phases 1, 2a, 2b, 3 complete |
+| `@heroku-mcp/postgres` | `postgres-v0.1.0` | Phase 6 Part A (reads) complete |
 | `@heroku-mcp/partner` | — | Phase 6+ |
 | `@heroku-mcp/http-server` | — | Phase 4 |
 | `herokumcp-platform-deploy` | — | Phase 5 |

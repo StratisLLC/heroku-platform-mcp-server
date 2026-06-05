@@ -1,0 +1,19 @@
+{
+  "_comment": "Representative shape of GET https://api.data.heroku.com/client/v11/databases/{addon-id}. Replace with a live capture (heroku pg:info --json or a probed response) when verifying against a real database; field names below match the Heroku Data API as of this writing.",
+  "info": [
+    { "name": "Plan", "values": ["Standard 0"], "resolve_db_name": false },
+    { "name": "Status", "values": ["Available"], "resolve_db_name": false },
+    { "name": "Data Size", "values": ["9.9 MB"], "resolve_db_name": false },
+    { "name": "Tables", "values": ["7"], "resolve_db_name": false },
+    { "name": "PG Version", "values": ["16.4"], "resolve_db_name": false },
+    { "name": "Connections", "values": ["3/120"], "resolve_db_name": false },
+    { "name": "Connection Pooling", "values": ["Available"], "resolve_db_name": false },
+    { "name": "High Availability", "values": ["Available"], "resolve_db_name": false },
+    { "name": "Region", "values": ["us-east-1"], "resolve_db_name": false },
+    { "name": "Followers", "values": ["None"], "resolve_db_name": false },
+    { "name": "Following", "values": ["None"], "resolve_db_name": false },
+    { "name": "Maintenance", "values": ["not required"], "resolve_db_name": false },
+    { "name": "Maintenance window", "values": ["Sundays 06:00 to 10:00 UTC"], "resolve_db_name": false },
+    { "name": "Created", "values": ["2024-01-01 00:00 UTC"], "resolve_db_name": false }
+  ]
+}

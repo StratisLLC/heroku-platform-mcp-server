@@ -11,11 +11,13 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
   AuditLogger,
   ETagCache,
+  PLATFORM_PROBES,
   RateLimitTracker,
   SchemaCache,
   createClient,
   type CapabilityResult,
   type HerokuClient,
+  type Probe,
 } from '@heroku-mcp/core';
 import { loadOrProbe } from './capabilities.js';
 import type { ToolContext } from './context.js';
@@ -50,6 +52,11 @@ export interface BuildServerOptions {
    *  SHA-256(token)[:16]. Pass an explicit value when the token is opaque to
    *  the caller (e.g. HTTP server: the connection token id). */
   tokenFingerprint?: string;
+  /** Extra capability probes to run alongside the Platform API matrix. Used by
+   *  the HTTP server to light up sibling product tiers (e.g. Postgres MCP) at
+   *  sign-in time so their tool families are gated by the same one-shot probe
+   *  pass. Defaults to none — stdio runs probe only the Platform matrix. */
+  extraProbes?: readonly Probe[];
 }
 
 /** Whatever the entrypoint needs to plug a transport into. */
@@ -100,6 +107,9 @@ export async function buildServer(opts: BuildServerOptions): Promise<BuiltServer
   const probeOptions = {
     token: initialToken,
     userAgent,
+    ...(opts.extraProbes && opts.extraProbes.length > 0
+      ? { probes: [...PLATFORM_PROBES, ...opts.extraProbes] }
+      : {}),
     ...(opts.fetch ? { fetch: opts.fetch } : {}),
   };
 

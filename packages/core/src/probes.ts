@@ -296,6 +296,84 @@ export const PARTNER_PROBES: readonly Probe[] = Object.freeze([
   },
 ]);
 
+/**
+ * Heroku Postgres probes (Phase 6 Part A).
+ *
+ * The Postgres-specific endpoint families live under the Heroku Data API
+ * (`api.data.heroku.com/client/v11/...`), which is the `data` base. Unlike the
+ * Platform API list probes, we cannot enumerate a real database without knowing
+ * a UUID, so each probe dials a deliberately-nonexistent database id and treats
+ * a `404` as "endpoint reachable + auth accepted" (the family is available). A
+ * `403`/`402` means the caller's token or plan cannot reach the family.
+ *
+ * These probes are additive: the package-level gate is the existing
+ * `data.postgres` root tier (see {@link PLATFORM_PROBES}). The sub-tiers below
+ * let individual tool families (backups, followers, credentials, query
+ * insights) detect availability without blindly calling the endpoint. Tools
+ * whose sub-tier was probed and came back unavailable return a structured
+ * "capability not available" envelope rather than issuing the request.
+ *
+ * Sub-tiers are namespaced under `data.` so they nest in the capability result
+ * the same way `data.postgres`/`data.redis`/`data.kafka` do.
+ */
+const PG_PROBE_DB_ID = '00000000-0000-0000-0000-000000000000';
+
+export const POSTGRES_PROBES: readonly Probe[] = Object.freeze([
+  {
+    id: 'pg.api.credentials',
+    tier: 'data.pg_credentials',
+    method: 'GET',
+    path: `/client/v11/databases/${PG_PROBE_DB_ID}/credentials`,
+    base: 'data',
+    required: false,
+    successCodes: SUCCESS,
+    emptyOkCodes: EMPTY_OK,
+    forbiddenCodes: FORBIDDEN,
+    dependsOn: 'data.postgres_root',
+  },
+  {
+    id: 'pg.api.backups',
+    tier: 'data.pg_backups',
+    method: 'GET',
+    path: `/client/v11/databases/${PG_PROBE_DB_ID}/backups`,
+    base: 'data',
+    required: false,
+    successCodes: SUCCESS,
+    emptyOkCodes: EMPTY_OK,
+    forbiddenCodes: FORBIDDEN,
+    dependsOn: 'data.postgres_root',
+  },
+  {
+    id: 'pg.api.followers',
+    tier: 'data.pg_followers',
+    method: 'GET',
+    path: `/client/v11/databases/${PG_PROBE_DB_ID}/followers`,
+    base: 'data',
+    required: false,
+    successCodes: SUCCESS,
+    emptyOkCodes: EMPTY_OK,
+    forbiddenCodes: FORBIDDEN,
+    dependsOn: 'data.postgres_root',
+  },
+  {
+    id: 'pg.api.query_insights',
+    tier: 'data.pg_query_insights',
+    method: 'GET',
+    path: `/client/v11/databases/${PG_PROBE_DB_ID}/query-stats`,
+    base: 'data',
+    required: false,
+    // 404 here is ambiguous: it can mean "endpoint reachable, db not found"
+    // (feature available) OR "feature not enabled on this plan". We optimistically
+    // treat 404 as reachable; the tool surfaces an actionable error at call time
+    // if query insights turns out to be disabled. A 402/403 is an unambiguous
+    // "gated" signal and marks the sub-tier unavailable.
+    successCodes: SUCCESS,
+    emptyOkCodes: EMPTY_OK,
+    forbiddenCodes: FORBIDDEN,
+    dependsOn: 'data.postgres_root',
+  },
+]);
+
 /** Substitute `${var}` placeholders in a path. Variables that aren't found in
  *  `vars` are left in place — the caller decides whether to treat that as an
  *  error or skip the probe. */

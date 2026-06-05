@@ -21,6 +21,7 @@ import {
   type BuiltServer,
   type ToolContext,
 } from '@heroku-mcp/platform';
+import { POSTGRES_PROBES, registerPostgresTools } from '@heroku-mcp/postgres';
 import { installAuditWrapper, type AuditSink } from './audit-wrapper.js';
 import { registerDynosRunBuffered, type WebSocketFactory } from './dynos-run.js';
 
@@ -69,6 +70,10 @@ export async function buildSessionMcp(opts: SessionMcpOptions): Promise<BuiltSer
     userAgentSuffix: 'platform-http',
     ...(opts.version !== undefined ? { version: opts.version } : {}),
     forceProbe: false,
+    // Probe the Postgres-specific Data API families alongside the Platform
+    // matrix so the sibling @heroku-mcp/postgres tools are gated by the same
+    // one-shot probe pass at session sign-in.
+    extraProbes: POSTGRES_PROBES,
     beforeRegisterTools: (server: McpServer, _ctx: ToolContext) => {
       // Layer 1: audit wrapper. Captures the previously-installed registerTool
       // (the SDK's default) and installs a wrapped version.
@@ -115,5 +120,9 @@ export async function buildSessionMcp(opts: SessionMcpOptions): Promise<BuiltSer
     built.context,
     opts.webSocketFactory ? { webSocketFactory: opts.webSocketFactory } : {},
   );
+  // Register the sibling Postgres MCP tools onto the same server + context so
+  // the merged catalog exposes Platform and Postgres tools as one surface. Uses
+  // the (restored) audit-wrapped registerTool, so Postgres tool calls audit too.
+  registerPostgresTools(built.server, built.context);
   return built;
 }
