@@ -120,6 +120,7 @@ export async function spinUpServer(
   let capabilities = overrides.capabilities ?? postgresCapabilities();
   const audit = new AuditLogger({ dir: paths.auditDir });
   const context: ToolContext = {
+    token: () => 'HRKU-test-token',
     client: createClient({
       token: () => 'HRKU-test-token',
       tokenFingerprint: 'test-fp',

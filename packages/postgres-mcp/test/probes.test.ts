@@ -26,22 +26,31 @@ function statusFetch(rules: { test: (url: string) => boolean; status: number }[]
 const PROBE_SET = [...PLATFORM_PROBES, ...POSTGRES_PROBES];
 
 describe('POSTGRES_PROBES', () => {
-  it('declares the four Data API family probes', () => {
+  it('declares the four Data API family probes with the right namespace + auth', () => {
     expect(POSTGRES_PROBES.map((p) => p.id)).toEqual([...PG_PROBE_IDS]);
     for (const probe of POSTGRES_PROBES) {
       expect(probe.base).toBe('data');
       expect(probe.dependsOn).toBe('data.postgres_root');
-      expect(probe.path.startsWith('/client/v11/databases/')).toBe(true);
+    }
+    const byId = Object.fromEntries(POSTGRES_PROBES.map((p) => [p.id, p]));
+    // Credentials live under the Basic-auth /postgres/v0 namespace.
+    expect(byId['pg.api.credentials']!.path.startsWith('/postgres/v0/databases/')).toBe(true);
+    expect(byId['pg.api.credentials']!.authScheme).toBe('basic');
+    // The rest stay on the Bearer /client/v11 namespace.
+    for (const id of ['pg.api.backups', 'pg.api.followers', 'pg.api.query_insights']) {
+      expect(byId[id]!.path.startsWith('/client/v11/databases/')).toBe(true);
+      expect(byId[id]!.authScheme).toBeUndefined();
     }
   });
 
   it('marks families available when the Data API returns 404 (reachable, db absent)', async () => {
+    // Everything defaults to 404: the root probe treats 404 as "reachable, no
+    // such DB" → available, and each family probe's 404 → empty → available.
     const caps = await runProbes({
       probes: PROBE_SET,
       token: 'tok',
       tokenFingerprint: 'fp',
-      // data root reachable (200), families 404 → "empty" → available.
-      fetch: statusFetch([{ test: (u) => u === 'https://api.data.heroku.com/postgres', status: 200 }]),
+      fetch: statusFetch([]),
     });
     const data = caps.tiers.data as Record<string, { available?: boolean }>;
     expect(data.postgres?.available).toBe(true);
@@ -56,10 +65,7 @@ describe('POSTGRES_PROBES', () => {
       probes: PROBE_SET,
       token: 'tok',
       tokenFingerprint: 'fp',
-      fetch: statusFetch([
-        { test: (u) => u === 'https://api.data.heroku.com/postgres', status: 200 },
-        { test: (u) => u.includes('/query-stats'), status: 403 },
-      ]),
+      fetch: statusFetch([{ test: (u) => u.includes('/query-stats'), status: 403 }]),
     });
     const data = caps.tiers.data as Record<string, { available?: boolean }>;
     expect(data.pg_query_insights?.available).toBe(false);
@@ -71,8 +77,10 @@ describe('POSTGRES_PROBES', () => {
       probes: PROBE_SET,
       token: 'tok',
       tokenFingerprint: 'fp',
-      // Everything (incl. /postgres root) defaults to 404 → root not reachable.
-      fetch: statusFetch([]),
+      // The root probe gets a 403 → not reachable → family probes are skipped.
+      fetch: statusFetch([
+        { test: (u) => u.includes('/client/v11/databases/00000000'), status: 403 },
+      ]),
     });
     const data = caps.tiers.data as Record<string, { available?: boolean }>;
     expect(data.postgres?.available).toBe(false);

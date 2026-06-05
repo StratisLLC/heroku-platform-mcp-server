@@ -8,6 +8,12 @@ import type { CapabilityResult } from '@heroku-mcp/core';
 import { parseEnvelope, postgresCapabilities, spinUpServer } from './helpers.js';
 
 const DATA = 'https://api.data.heroku.com/client/v11';
+const ADDON_LOOKUP = (db: string) => `https://api.heroku.com/addons/${db}`;
+/** Canned Platform-API addon→app resolution response. */
+const addonAppResp = (db: string, app: string) => ({
+  match: (url: string) => url === ADDON_LOOKUP(db),
+  body: { id: db, app: { id: 'app-uuid', name: app } },
+});
 
 describe('backup tools', () => {
   it('registers the backup read tools', async () => {
@@ -23,10 +29,11 @@ describe('backup tools', () => {
     );
   });
 
-  it('pg_backups_list GETs the database backups', async () => {
+  it('pg_backups_list resolves the owning app, then GETs app-scoped transfers', async () => {
     const { client, calls } = await spinUpServer({
       responses: [
-        { match: (url) => url === `${DATA}/databases/a-pg/backups`, body: [{ num: 'b001' }] },
+        addonAppResp('a-pg', 'demo'),
+        { match: (url) => url === `${DATA}/apps/demo/transfers`, body: [{ num: 1 }] },
       ],
     });
     const result = (await client.callTool({
@@ -34,26 +41,43 @@ describe('backup tools', () => {
       arguments: { database: 'a-pg' },
     })) as { content: unknown[] };
     expect(parseEnvelope(result).ok).toBe(true);
-    expect(calls[0]?.method).toBe('GET');
-    expect(calls[0]?.url).toBe(`${DATA}/databases/a-pg/backups`);
+    expect(calls[0]?.url).toBe(ADDON_LOOKUP('a-pg')); // app resolution
+    expect(calls[1]?.method).toBe('GET');
+    expect(calls[1]?.url).toBe(`${DATA}/apps/demo/transfers`);
   });
 
-  it('pg_backups_info GETs one backup', async () => {
+  it('pg_backups_list uses an explicit app argument without an addon lookup', async () => {
+    const { client, calls } = await spinUpServer({
+      responses: [{ match: (url) => url === `${DATA}/apps/myapp/transfers`, body: [] }],
+    });
+    await client.callTool({
+      name: 'pg_backups_list',
+      arguments: { database: 'a-pg', app: 'myapp' },
+    });
+    // No Platform-API addon lookup — app was supplied directly.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe(`${DATA}/apps/myapp/transfers`);
+  });
+
+  it('pg_backups_info GETs one app-scoped transfer', async () => {
     const { client, calls } = await spinUpServer({
       responses: [
-        { match: (url) => url === `${DATA}/databases/a-pg/backups/b001`, body: { num: 'b001' } },
+        { match: (url) => url === `${DATA}/apps/myapp/transfers/b001`, body: { num: 'b001' } },
       ],
     });
-    await client.callTool({ name: 'pg_backups_info', arguments: { database: 'a-pg', backup: 'b001' } });
-    expect(calls[0]?.url).toBe(`${DATA}/databases/a-pg/backups/b001`);
+    await client.callTool({
+      name: 'pg_backups_info',
+      arguments: { database: 'a-pg', app: 'myapp', backup: 'b001' },
+    });
+    expect(calls[0]?.url).toBe(`${DATA}/apps/myapp/transfers/b001`);
   });
 
-  it('pg_backups_url POSTs to the public-url action', async () => {
+  it('pg_backups_url POSTs to the app-scoped public-url action', async () => {
     const { client, calls } = await spinUpServer({
       responses: [
         {
           match: (url, init) =>
-            url === `${DATA}/databases/a-pg/backups/b001/actions/public-url` &&
+            url === `${DATA}/apps/myapp/transfers/b001/actions/public-url` &&
             init?.method === 'POST',
           body: { url: 'https://signed.example.com/dump', expires_at: '2026-01-01T00:00:00Z' },
         },
@@ -61,13 +85,14 @@ describe('backup tools', () => {
     });
     const result = (await client.callTool({
       name: 'pg_backups_url',
-      arguments: { database: 'a-pg', backup: 'b001' },
+      arguments: { database: 'a-pg', app: 'myapp', backup: 'b001' },
     })) as { content: unknown[] };
     expect(parseEnvelope(result).ok).toBe(true);
     expect(calls[0]?.method).toBe('POST');
+    expect(calls[0]?.url).toBe(`${DATA}/apps/myapp/transfers/b001/actions/public-url`);
   });
 
-  it('pg_backups_schedules GETs the transfer schedules', async () => {
+  it('pg_backups_schedules GETs the database-scoped transfer schedules', async () => {
     const { client, calls } = await spinUpServer({
       responses: [
         { match: (url) => url === `${DATA}/databases/a-pg/transfer-schedules`, body: [] },
@@ -107,13 +132,17 @@ describe('backup tools', () => {
     delete (caps.tiers.data as Record<string, unknown>).pg_backups;
     const { client, calls } = await spinUpServer({
       capabilities: caps,
-      responses: [{ match: (url) => url === `${DATA}/databases/a-pg/backups`, body: [] }],
+      responses: [
+        addonAppResp('a-pg', 'demo'),
+        { match: (url) => url === `${DATA}/apps/demo/transfers`, body: [] },
+      ],
     });
     const result = (await client.callTool({
       name: 'pg_backups_list',
       arguments: { database: 'a-pg' },
     })) as { content: unknown[] };
     expect(parseEnvelope(result).ok).toBe(true);
-    expect(calls).toHaveLength(1);
+    // addon lookup + transfers list.
+    expect(calls).toHaveLength(2);
   });
 });

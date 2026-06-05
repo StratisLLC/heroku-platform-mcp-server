@@ -202,7 +202,13 @@ async function executeProbe(probe: Probe, ctx: ExecuteContext): Promise<ProbeOut
     );
     headers.Authorization = `Basic ${credential}`;
   } else if (ctx.token) {
-    headers.Authorization = `Bearer ${ctx.token}`;
+    if (probe.authScheme === 'basic') {
+      // Heroku Data API `/postgres/v0/*` namespace: HTTP Basic auth with an
+      // empty username and the OAuth token as the password.
+      headers.Authorization = `Basic ${Buffer.from(`:${ctx.token}`).toString('base64')}`;
+    } else {
+      headers.Authorization = `Bearer ${ctx.token}`;
+    }
   }
 
   let lastOutcome: ProbeOutcome | undefined;

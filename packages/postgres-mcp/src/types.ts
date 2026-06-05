@@ -45,22 +45,31 @@ export const credentialInput = {
     .describe('Credential (role) name on the database, e.g. "default" or a named credential.'),
 };
 
-/** A backup identifier on a database. */
+/** Optional owning-app override. Heroku scopes backup transfers to the *app*,
+ *  not the database. When omitted, the tool resolves the owning app from the
+ *  database add-on via the Platform API. */
+export const optionalAppInput = {
+  app: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'App id (UUID) or name that owns the database. Optional — defaults to the database add-on\'s owning app. Backups (transfers) are scoped to the app.',
+    ),
+};
+
+/** Input for the app-scoped backup *list*: a database plus an optional app. */
+export const backupListInput = {
+  ...databaseInput,
+  ...optionalAppInput,
+};
+
+/** A backup identifier on a database (app-scoped transfer). */
 export const backupInput = {
   ...databaseInput,
+  ...optionalAppInput,
   backup: z
     .string()
     .min(1)
     .describe('Backup identifier — the backup "num" (e.g. "b001") or its UUID.'),
-};
-
-/** Optional limit for query-insights style listings. */
-export const limitInput = {
-  limit: z
-    .number()
-    .int()
-    .min(1)
-    .max(100)
-    .optional()
-    .describe('Maximum number of rows to return (default 20).'),
 };

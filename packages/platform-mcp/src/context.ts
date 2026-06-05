@@ -17,6 +17,13 @@ export type RefreshCapabilities = (opts?: { force?: boolean }) => Promise<Capabi
 export interface ToolContext {
   /** HTTP client wired to api.heroku.com. */
   client: HerokuClient;
+  /** Lazy provider for the raw Heroku OAuth token. Most tools never need this —
+   *  the {@link client} attaches the Bearer header itself. It exists for the few
+   *  endpoints that require a different auth construction from the same token,
+   *  notably the Heroku Data API's `/postgres/v0/*` namespace, which takes HTTP
+   *  Basic auth (`Basic base64(":" + token)`). Treat the returned value as a
+   *  secret: never log it. */
+  token: () => Promise<string> | string;
   /** Audit logger for mutating tools (Phase 1 has none, but the wiring is in
    *  place so Phase 2 can drop in writes without changing this surface). */
   audit: AuditLogger;

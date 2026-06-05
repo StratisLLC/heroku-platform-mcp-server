@@ -127,6 +127,7 @@ export async function buildServer(opts: BuildServerOptions): Promise<BuiltServer
 
   const context: ToolContext = {
     client,
+    token: tokenProvider,
     audit,
     paths,
     schema,

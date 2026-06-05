@@ -15,5 +15,5 @@ export { registerPostgresTools } from './tools/index.js';
 export type { PostgresRegistrationSummary } from './tools/index.js';
 export { POSTGRES_PROBES, PG_FAMILY_TIERS, PG_PROBE_IDS } from './probes.js';
 export { connectionUrlFrom } from './tools/inventory.js';
-export { DATA_API_BASE, DATA_API_PREFIX, dataUrl } from './client.js';
+export { DATA_API_BASE, DATA_API_PREFIX, POSTGRES_V0_PREFIX, dataUrl, pgV0Url } from './client.js';
 export type { PgFamily } from './client.js';

@@ -4,10 +4,13 @@
  * Gated on BOTH `HEROKUMCP_TEST_TOKEN` (a real Heroku OAuth token) and
  * `HEROKUMCP_TEST_PG_ADDON_ID` (a database the token can read). Without either,
  * every test is skipped, so the file is safe to run in CI without secrets.
+ * `HEROKUMCP_TEST_PG_APP` is optional and only needed to exercise `pg_list`.
  *
  * It boots a real Platform `McpServer` with the Postgres probes wired in via
- * `extraProbes`, registers the Postgres tools onto it, and round-trips the read
- * tools against the live Data API.
+ * `extraProbes`, registers the Postgres tools onto it, and round-trips every
+ * surviving read tool against the live Data API. Tools whose data may not exist
+ * on a fresh database (backups, followers, maintenance on small plans) are
+ * checked "skip-graceful": a structured error OR a success envelope both pass.
  */
 
 import { mkdtemp } from 'node:fs/promises';
@@ -21,6 +24,7 @@ import { POSTGRES_PROBES, registerPostgresTools } from '../../src/index.js';
 
 const TOKEN = process.env.HEROKUMCP_TEST_TOKEN;
 const ADDON = process.env.HEROKUMCP_TEST_PG_ADDON_ID;
+const APP = process.env.HEROKUMCP_TEST_PG_APP;
 const describeLive = TOKEN && ADDON ? describe : describe.skip;
 
 interface Envelope<T = unknown> {
@@ -29,13 +33,28 @@ interface Envelope<T = unknown> {
   error?: { kind?: string; message?: string };
 }
 
-function parseEnv<T = unknown>(result: { content: unknown[] }): Envelope<T> {
+interface ToolResult {
+  content: unknown[];
+  isError?: boolean;
+}
+
+function parseEnv<T = unknown>(result: ToolResult): Envelope<T> {
   const first = result.content[0] as { type?: string; text?: string };
   return JSON.parse(first.text!) as Envelope<T>;
 }
 
+/** Skip-graceful assertion: either a structured error or a successful envelope. */
+function okOrError(result: ToolResult, label: string): Envelope {
+  const env = parseEnv(result);
+  const passed = result.isError === true || env.ok === true;
+  if (!passed) {
+    throw new Error(`${label}: neither ok nor a structured error — ${JSON.stringify(env)}`);
+  }
+  return env;
+}
+
 describeLive('postgres-mcp ↔ live Heroku Data API', () => {
-  it('probes, registers, and round-trips read tools against a real database', async () => {
+  it('round-trips every surviving read tool against a real database', async () => {
     const home = await mkdtemp(join(tmpdir(), 'herokumcp-pg-int-'));
     const paths = resolvePaths({ home, platform: process.platform });
 
@@ -55,23 +74,63 @@ describeLive('postgres-mcp ↔ live Heroku Data API', () => {
 
     const names = (await client.listTools()).tools.map((t) => t.name);
     expect(names).toContain('pg_info');
+    // Deferred tools must not be advertised.
+    expect(names).not.toContain('pg_diagnostics');
+    expect(names).not.toContain('pg_query_insights');
+    expect(names).not.toContain('pg_connection_pooling');
 
-    const info = (await client.callTool({
-      name: 'pg_info',
-      arguments: { database: ADDON },
-    })) as { content: unknown[] };
-    expect(parseEnv(info).ok).toBe(true);
+    const call = (name: string, args: Record<string, unknown>): Promise<ToolResult> =>
+      client.callTool({ name, arguments: args }) as Promise<ToolResult>;
 
-    const creds = (await client.callTool({
-      name: 'pg_credentials_list',
-      arguments: { database: ADDON },
-    })) as { content: unknown[]; isError?: boolean };
-    expect(creds.isError === true || parseEnv(creds).ok === true).toBe(true);
+    // ---- core happy paths (must succeed) ----
+    const info = parseEnv<{ info?: unknown; resource_url?: unknown }>(await call('pg_info', { database: ADDON! }));
+    expect(info.ok).toBe(true);
+    expect(info.data?.info).toBeDefined();
+    // The password-bearing resource_url must have been stripped.
+    expect(info.data).not.toHaveProperty('resource_url');
 
-    const backups = (await client.callTool({
-      name: 'pg_backups_list',
-      arguments: { database: ADDON },
-    })) as { content: unknown[]; isError?: boolean };
-    expect(backups.isError === true || parseEnv(backups).ok === true).toBe(true);
-  }, 60_000);
+    expect(parseEnv(await call('pg_plans', {})).ok).toBe(true);
+
+    const creds = parseEnv<unknown[]>(await call('pg_credentials_list', { database: ADDON! }));
+    expect(creds.ok).toBe(true);
+    // The redacted listing never carries a raw password.
+    expect(JSON.stringify(creds.data)).not.toContain('password');
+
+    const credUrl = parseEnv<{ connection_url: string }>(
+      await call('pg_credentials_url', { database: ADDON!, credential: 'default' }),
+    );
+    expect(credUrl.ok).toBe(true);
+    expect(credUrl.data?.connection_url).toMatch(/^postgres:\/\//);
+
+    const backups = parseEnv(await call('pg_backups_list', { database: ADDON! }));
+    expect(backups.ok).toBe(true);
+
+    expect(parseEnv(await call('pg_backups_schedules', { database: ADDON! })).ok).toBe(true);
+
+    expect(parseEnv(await call('pg_replication_status', { database: ADDON! })).ok).toBe(true);
+    expect(parseEnv(await call('pg_followers_list', { database: ADDON! })).ok).toBe(true);
+
+    // ---- skip-graceful (data may not exist / plan-gated) ----
+    // pg_leader 404s when the DB isn't a follower; that's a valid structured error.
+    okOrError(await call('pg_leader', { database: ADDON! }), 'pg_leader');
+    // Maintenance is 422 on Essential-tier plans.
+    okOrError(await call('pg_maintenance_window', { database: ADDON! }), 'pg_maintenance_window');
+
+    // pg_list only when an app is supplied.
+    if (APP) {
+      const list = parseEnv<unknown[]>(await call('pg_list', { app: APP }));
+      expect(list.ok).toBe(true);
+    }
+
+    // pg_backups_info / pg_backups_url need an existing backup; exercise them
+    // only if the list returned one, otherwise skip (don't fabricate data).
+    const firstBackup = Array.isArray(backups.data)
+      ? (backups.data as { num?: number | string }[])[0]
+      : undefined;
+    if (firstBackup?.num !== undefined) {
+      const num = String(firstBackup.num);
+      okOrError(await call('pg_backups_info', { database: ADDON!, backup: num }), 'pg_backups_info');
+      okOrError(await call('pg_backups_url', { database: ADDON!, backup: num }), 'pg_backups_url');
+    }
+  }, 120_000);
 });

@@ -1,0 +1,73 @@
+{
+    "addon_id": "d53b5949-1fb9-48ae-abc4-cc4f07a6dde7",
+    "name": "postgresql-dimensional-08540",
+    "plan": "essential-0",
+    "created_at": "2026-06-05 02:18:38 +0000",
+    "database_user": "u9tkqu8ssu7ab7",
+    "database_name": "d586udusiq3hsl",
+    "resource_url": "postgres://u9tkqu8ssu7ab7:REDACTED_TEST_PASSWORD@c4fqkld51su0p3.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d586udusiq3hsl",
+    "waiting?": false,
+    "num_bytes": 8103155,
+    "info": [
+        {
+            "name": "Plan",
+            "values": [
+                "essential-0"
+            ]
+        },
+        {
+            "name": "Status",
+            "values": [
+                "Available"
+            ]
+        },
+        {
+            "name": "Connections",
+            "values": [
+                "0/20"
+            ]
+        },
+        {
+            "name": "PG Version",
+            "values": [
+                "17.9"
+            ]
+        },
+        {
+            "name": "Created",
+            "values": [
+                "2026-06-05 02:18 "
+            ]
+        },
+        {
+            "name": "Data Size",
+            "values": [
+                "7.73 MB / 1 GB (0.75%) (In compliance)"
+            ]
+        },
+        {
+            "name": "Tables",
+            "values": [
+                "0/4000 (In compliance)"
+            ]
+        },
+        {
+            "name": "Fork/Follow",
+            "values": [
+                "Unsupported"
+            ]
+        },
+        {
+            "name": "Rollback",
+            "values": [
+                "Unsupported"
+            ]
+        },
+        {
+            "name": "Continuous Protection",
+            "values": [
+                "On"
+            ]
+        }
+    ]
+}

@@ -1,0 +1,52 @@
+[
+    {
+        "actions": [
+            {
+                "id": "de7d2e26-f94e-4de2-b106-a75c6f36cfa4",
+                "label": "Create Dataclip",
+                "action": null,
+                "url": "http://dataclips.heroku.com/clips/new?heroku_resource_id=:resource_id&heroku_id=:resource_uuid",
+                "requires_owner": null
+            },
+            {
+                "id": "c373e5d8-8c7b-4776-a425-ae5b646397cc",
+                "label": "Upgrade instructions",
+                "action": null,
+                "url": "https://devcenter.heroku.com/articles/upgrading-heroku-postgres-databases",
+                "requires_owner": null
+            }
+        ],
+        "app": {
+            "id": "f204f371-a67d-41d8-8982-aa043ed6bf57",
+            "name": "dm-pgtest"
+        },
+        "config_vars": [
+            "DATABASE_URL"
+        ],
+        "created_at": "2026-06-05T02:18:38Z",
+        "id": "d53b5949-1fb9-48ae-abc4-cc4f07a6dde7",
+        "name": "postgresql-dimensional-08540",
+        "addon_service": {
+            "id": "6c67493d-8fc2-4cd4-9161-4f1ec11cbe69",
+            "name": "heroku-postgresql"
+        },
+        "plan": {
+            "id": "508e7843-3a7e-4423-9c46-e7e9de799824",
+            "name": "heroku-postgresql:essential-0"
+        },
+        "billing_entity": {
+            "id": "f204f371-a67d-41d8-8982-aa043ed6bf57",
+            "name": "dm-pgtest",
+            "type": "app"
+        },
+        "provider_id": "d53b5949-1fb9-48ae-abc4-cc4f07a6dde7",
+        "state": "provisioned",
+        "updated_at": "2026-06-05T02:20:04Z",
+        "web_url": "https://addons-sso.heroku.com/apps/f204f371-a67d-41d8-8982-aa043ed6bf57/addons/d53b5949-1fb9-48ae-abc4-cc4f07a6dde7",
+        "billed_price": {
+            "cents": 500,
+            "contract": false,
+            "unit": "month"
+        }
+    }
+]

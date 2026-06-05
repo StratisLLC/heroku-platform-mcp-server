@@ -45,6 +45,14 @@ export interface Probe {
   partner?: boolean;
   /** True if the probe uses manifest Basic auth instead of OAuth bearer. */
   manifestAuth?: boolean;
+  /**
+   * How to authenticate this probe. Defaults to `'bearer'` (`Authorization:
+   * Bearer <token>`). Set to `'basic'` for Heroku Data API endpoints under
+   * `/postgres/v0/*`, which take HTTP Basic auth with an empty username and the
+   * OAuth token as the password (`Basic base64(":" + token)`). Ignored when
+   * {@link manifestAuth} is set (manifest Basic auth takes precedence).
+   */
+  authScheme?: 'bearer' | 'basic';
 }
 
 /** Default `Range` value used by every "list" probe. */
@@ -203,15 +211,20 @@ export const PLATFORM_PROBES: readonly Probe[] = Object.freeze([
 
   // ---- data ----
   {
+    // The Heroku Data API has no probeable "root": `HEAD /postgres` returns 404
+    // because no such resource exists. Instead we GET a deliberately-nonexistent
+    // database UUID under the real `/client/v11/databases/{id}` path. A 404 means
+    // "endpoint reachable + auth accepted, no such DB" → the tier is available.
+    // A 401/402/403 means the token can't reach the Data API at all.
     id: 'data.postgres_root',
     tier: 'data.postgres',
-    method: 'HEAD',
-    path: '/postgres',
+    method: 'GET',
+    path: '/client/v11/databases/00000000-0000-0000-0000-000000000000',
     base: 'data',
     required: false,
-    successCodes: [200, 204],
+    successCodes: [200, 204, 404], // 404 = reachable, no such DB = OK
     emptyOkCodes: [],
-    forbiddenCodes: [403, 404],
+    forbiddenCodes: [401, 402, 403], // unauthorized / payment required / forbidden
   },
   {
     id: 'data.redis_root',
@@ -320,11 +333,15 @@ const PG_PROBE_DB_ID = '00000000-0000-0000-0000-000000000000';
 
 export const POSTGRES_PROBES: readonly Probe[] = Object.freeze([
   {
+    // Credentials live under the `/postgres/v0/*` namespace, which is HTTP Basic
+    // auth (empty user, OAuth token as password) — NOT Bearer like `/client/v11`.
+    // A nonexistent DB returns 404 here ("reachable, no such DB" = available).
     id: 'pg.api.credentials',
     tier: 'data.pg_credentials',
     method: 'GET',
-    path: `/client/v11/databases/${PG_PROBE_DB_ID}/credentials`,
+    path: `/postgres/v0/databases/${PG_PROBE_DB_ID}/credentials`,
     base: 'data',
+    authScheme: 'basic',
     required: false,
     successCodes: SUCCESS,
     emptyOkCodes: EMPTY_OK,

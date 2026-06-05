@@ -245,13 +245,23 @@ describe('runProbes — data tier nesting', () => {
     expect(data.postgres?.available).toBe(true);
   });
 
-  it('404 on data.postgres means unavailable (no add-on in scope)', async () => {
+  it('404 on data.postgres means AVAILABLE (endpoint reachable, probe DB absent)', async () => {
+    // The probe GETs a nonexistent database UUID under /client/v11/databases/{id};
+    // a 404 confirms the endpoint is reachable and auth was accepted.
     const probe = PLATFORM_PROBES.find((p) => p.id === 'data.postgres_root')!;
-    const { fetch } = scriptFetch([() => new Response(null, { status: 404 })]);
+    const { fetch } = scriptFetch([() => new Response('{}', { status: 404 })]);
+    const r = await runProbes({ ...baseOpts, probes: [probe], fetch });
+    const data = r.tiers.data as Record<string, TierResult>;
+    expect(data.postgres?.available).toBe(true);
+  });
+
+  it('403 on data.postgres means unavailable (token cannot reach the Data API)', async () => {
+    const probe = PLATFORM_PROBES.find((p) => p.id === 'data.postgres_root')!;
+    const { fetch } = scriptFetch([() => new Response('{}', { status: 403 })]);
     const r = await runProbes({ ...baseOpts, probes: [probe], fetch });
     const data = r.tiers.data as Record<string, TierResult>;
     expect(data.postgres?.available).toBe(false);
-    expect(data.postgres?.reason).toBe('not_found');
+    expect(data.postgres?.reason).toBe('forbidden');
   });
 });
 
@@ -371,6 +381,26 @@ describe('runProbes — request shape', () => {
     expect(
       (r.tiers['partner.manifest'] as TierResult).probes?.['partner.installs_list']?.reason,
     ).toBe('skipped');
+  });
+
+  it('uses HTTP Basic (empty user, token as password) for authScheme:"basic" probes', async () => {
+    const probe: Probe = {
+      id: 'pg.basic',
+      tier: 'data.pg_credentials',
+      method: 'GET',
+      path: '/postgres/v0/databases/zero/credentials',
+      base: 'data',
+      authScheme: 'basic',
+      required: false,
+      successCodes: [200],
+      emptyOkCodes: [404],
+      forbiddenCodes: [402, 403],
+    };
+    const { fetch, calls } = scriptFetch([() => F.ok([])]);
+    await runProbes({ ...baseOpts, probes: [probe], fetch, token: 'my-token' });
+    const expected = `Basic ${Buffer.from(':my-token').toString('base64')}`;
+    expect(calls[0]!.headers!.authorization).toBe(expected);
+    expect(calls[0]!.url.startsWith('https://api.data.heroku.com')).toBe(true);
   });
 });
 
