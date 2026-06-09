@@ -11,11 +11,12 @@
 
 import { Hono } from 'hono';
 import type { AppEnv } from '../auth/middleware.js';
+import type { Config } from '../config.js';
 
 export interface WellKnownDeps {
-  /** Externally-resolvable base URL, e.g. https://herokumcp.example.com. No
-   *  trailing slash. */
-  publicUrl: string;
+  /** Carries the resolver-backed `publicUrl` getter; read inside the handler so
+   *  the lazily-resolved value is available. */
+  cfg: Config;
 }
 
 export interface AuthorizationServerMetadata {
@@ -74,11 +75,11 @@ export function buildWellKnownRoutes(deps: WellKnownDeps): Hono<AppEnv> {
   const router = new Hono<AppEnv>();
 
   router.get('/.well-known/oauth-authorization-server', (c) => {
-    return c.json(buildAuthorizationServerMetadata(deps.publicUrl));
+    return c.json(buildAuthorizationServerMetadata(deps.cfg.publicUrl));
   });
 
   router.get('/.well-known/oauth-protected-resource', (c) => {
-    return c.json(buildProtectedResourceMetadata(deps.publicUrl));
+    return c.json(buildProtectedResourceMetadata(deps.cfg.publicUrl));
   });
 
   return router;

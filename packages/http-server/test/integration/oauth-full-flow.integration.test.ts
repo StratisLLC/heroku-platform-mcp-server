@@ -22,6 +22,7 @@ import { buildApp } from '../../src/app.js';
 import { runMigrations } from '../../src/db/migrate.js';
 import { TransportManager } from '../../src/mcp/transport.js';
 import type { Config } from '../../src/config.js';
+import { PublicUrlResolver } from '../../src/public-url.js';
 import type { HerokuOAuthConfig } from '../../src/oauth/heroku.js';
 
 async function pickFreePort(): Promise<number> {
@@ -73,6 +74,11 @@ describeIfDb('OAuth provider end-to-end flow (real Postgres + mocked Heroku)', (
       port,
       isProduction: false,
       publicUrl: baseUrl,
+      publicUrlResolver: new PublicUrlResolver({
+        explicit: baseUrl,
+        isProduction: false,
+        port,
+      }),
       databaseUrl: DB_URL!,
       dbPoolMax: 5,
       dbSsl: 'off',

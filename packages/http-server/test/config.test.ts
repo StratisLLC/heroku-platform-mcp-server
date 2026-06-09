@@ -79,10 +79,26 @@ describe('loadConfig', () => {
     expect(loadConfig({ ...baseEnv(), NODE_ENV: 'development' }).isProduction).toBe(false);
   });
 
-  it('refuses to start without HEROKUMCP_PUBLIC_URL', () => {
+  it('boots without HEROKUMCP_PUBLIC_URL, falling back to localhost in dev', () => {
     const env = baseEnv();
     delete env.HEROKUMCP_PUBLIC_URL;
-    expect(() => loadConfig(env)).toThrow(/HEROKUMCP_PUBLIC_URL/);
+    // No NODE_ENV → not production → resolver synthesizes a localhost URL so
+    // local dev needs no config.
+    const cfg = loadConfig(env);
+    expect(cfg.publicUrl).toBe('http://localhost:3000');
+    expect(cfg.publicUrlResolver.source()).toBe('dev-fallback');
+  });
+
+  it('boots in production without HEROKUMCP_PUBLIC_URL (URL resolved later)', () => {
+    const env = baseEnv();
+    delete env.HEROKUMCP_PUBLIC_URL;
+    // The Button-deploy case: no public URL known at boot. loadConfig must NOT
+    // throw; the URL is resolved from the first inbound request instead.
+    const cfg = loadConfig({ ...env, NODE_ENV: 'production' });
+    expect(cfg.publicUrlResolver.peek()).toBeUndefined();
+    // Reading publicUrl before resolution throws (consumers read it inside
+    // request handlers, after the public-url middleware has resolved it).
+    expect(() => cfg.publicUrl).toThrow(/not yet known/);
   });
 
   it('refuses to start with a HEROKUMCP_PUBLIC_URL missing scheme', () => {
@@ -94,38 +110,15 @@ describe('loadConfig', () => {
   it('trims a trailing slash from HEROKUMCP_PUBLIC_URL', () => {
     const cfg = loadConfig({ ...baseEnv(), HEROKUMCP_PUBLIC_URL: 'https://srv.example/' });
     expect(cfg.publicUrl).toBe('https://srv.example');
+    expect(cfg.publicUrlResolver.source()).toBe('explicit');
   });
 
-  it('auto-detects publicUrl from HEROKU_APP_DEFAULT_DOMAIN_NAME when unset', () => {
-    const env = baseEnv();
-    delete env.HEROKUMCP_PUBLIC_URL;
-    const cfg = loadConfig({
-      ...env,
-      HEROKU_APP_DEFAULT_DOMAIN_NAME: 'myapp-5fc113ad890b.herokuapp.com',
-    });
-    expect(cfg.publicUrl).toBe('https://myapp-5fc113ad890b.herokuapp.com');
-  });
-
-  it('auto-detects publicUrl from HEROKU_APP_NAME as a legacy fallback', () => {
-    const env = baseEnv();
-    delete env.HEROKUMCP_PUBLIC_URL;
-    const cfg = loadConfig({ ...env, HEROKU_APP_NAME: 'myapp' });
-    expect(cfg.publicUrl).toBe('https://myapp.herokuapp.com');
-  });
-
-  it('prefers an explicit HEROKUMCP_PUBLIC_URL over Heroku-injected metadata', () => {
+  it('an explicit HEROKUMCP_PUBLIC_URL is locked in as the public URL', () => {
     const cfg = loadConfig({
       ...baseEnv(),
       HEROKUMCP_PUBLIC_URL: 'https://explicit.example.com',
-      HEROKU_APP_DEFAULT_DOMAIN_NAME: 'myapp-5fc113ad890b.herokuapp.com',
-      HEROKU_APP_NAME: 'myapp',
     });
     expect(cfg.publicUrl).toBe('https://explicit.example.com');
-  });
-
-  it('error message points at dyno metadata when nothing is set', () => {
-    const env = baseEnv();
-    delete env.HEROKUMCP_PUBLIC_URL;
-    expect(() => loadConfig(env)).toThrow(/runtime-dyno-metadata/);
+    expect(cfg.publicUrlResolver.source()).toBe('explicit');
   });
 });

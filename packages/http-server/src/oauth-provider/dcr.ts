@@ -13,6 +13,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import type pg from 'pg';
 import type { AppEnv } from '../auth/middleware.js';
+import type { Config } from '../config.js';
 import { insertOAuthClient } from '../db/repos/oauth-clients.js';
 
 /** RFC 7591 registration request — we accept the common fields and ignore the
@@ -28,8 +29,9 @@ const RegisterRequest = z.object({
 
 export interface DcrDeps {
   pool: pg.Pool;
-  /** Base URL for the registration_client_uri response field. */
-  publicUrl: string;
+  /** Carries the resolver-backed `publicUrl` getter (read inside the handler)
+   *  for the registration_client_uri response field. */
+  cfg: Config;
   /** Override the id/secret generators (tests). */
   generators?: {
     clientId?: () => string;
@@ -137,7 +139,7 @@ export function buildDcrRoutes(deps: DcrDeps): Hono<AppEnv> {
     });
 
     const issuedAtSec = Math.floor(stored.createdAt.getTime() / 1000);
-    const base = deps.publicUrl.replace(/\/$/, '');
+    const base = deps.cfg.publicUrl.replace(/\/$/, '');
     return c.json(
       {
         client_id: clientId,

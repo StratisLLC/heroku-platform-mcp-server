@@ -13,9 +13,10 @@
  *   HEROKUMCP_ADMIN_CONTACT         email/URL shown on access-denied pages
  *   DATABASE_URL                    Postgres connection string
  *
- *   HEROKUMCP_PUBLIC_URL            external base URL, e.g. https://herokumcp.example.com
- *
  * Optional:
+ *   HEROKUMCP_PUBLIC_URL            external base URL, e.g. https://herokumcp.example.com
+ *                                   When unset we learn it lazily from the first
+ *                                   inbound request's Host header (see PublicUrlResolver).
  *   PORT                            HTTP port (default 3000)
  *   HEROKUMCP_OAUTH_SCOPE           OAuth scope (default "write-protected")
  *   MCP_ALLOWED_EMAILS              comma-separated allowlist
@@ -28,6 +29,7 @@
 
 import { z } from 'zod';
 import { loadMasterKey } from '@heroku-mcp/core';
+import { PublicUrlResolver } from './public-url.js';
 
 const Env = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
@@ -38,8 +40,10 @@ const Env = z.object({
   HEROKUMCP_OAUTH_CLIENT_SECRET: z.string().min(1, 'HEROKUMCP_OAUTH_CLIENT_SECRET is required'),
   HEROKUMCP_ADMIN_CONTACT: z.string().min(1, 'HEROKUMCP_ADMIN_CONTACT is required'),
   HEROKUMCP_OAUTH_SCOPE: z.string().default('write-protected'),
-  // Optional in the schema: when unset we auto-detect it from Heroku Dyno
-  // Metadata (see resolvePublicUrl). When present it must carry a scheme.
+  // Optional: an explicit operator override. When unset, the public URL is
+  // resolved lazily from the first inbound request's Host header (see
+  // PublicUrlResolver), so the server boots fine without it. When present it
+  // must carry a scheme.
   HEROKUMCP_PUBLIC_URL: z
     .string()
     .min(1)
@@ -47,8 +51,10 @@ const Env = z.object({
       message: 'HEROKUMCP_PUBLIC_URL must start with http:// or https://',
     })
     .optional(),
-  // Injected by Heroku Dyno Metadata (Heroku Labs, opt-in). Used to derive
-  // HEROKUMCP_PUBLIC_URL when the operator didn't set it explicitly.
+  // Injected by Heroku Dyno Metadata (Heroku Labs, opt-in). Kept in the schema
+  // for compatibility, but no longer used to derive the public URL — that's now
+  // resolved lazily from request headers, which works even on Button deploys
+  // where dyno metadata isn't available.
   HEROKU_APP_DEFAULT_DOMAIN_NAME: z.string().optional(),
   HEROKU_APP_NAME: z.string().optional(),
   MCP_ALLOWED_EMAILS: z.string().optional(),
@@ -65,7 +71,16 @@ type EnvOutput = z.output<typeof Env>;
 export interface Config {
   port: number;
   isProduction: boolean;
+  /**
+   * The external base URL the server advertises (OAuth metadata, callback URLs,
+   * .well-known docs). No trailing slash. Backed by {@link publicUrlResolver}:
+   * reading it before the URL is known (production, no request seen yet) throws,
+   * so consumers must read it inside a request handler, not at app-build time.
+   */
   publicUrl: string;
+  /** Owns the lazy resolution of {@link publicUrl}. The public-url middleware
+   *  feeds it request headers; explicit env or dev fallback lock it earlier. */
+  publicUrlResolver: PublicUrlResolver;
   databaseUrl: string;
   dbPoolMax: number;
   dbSsl: 'require' | 'no-verify' | 'off';
@@ -102,7 +117,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
   const e = parsed.data;
 
-  const publicUrl = resolvePublicUrl(e);
+  const isProduction = (e.NODE_ENV ?? '').toLowerCase() === 'production';
+
+  const publicUrlResolver = new PublicUrlResolver({
+    explicit: e.HEROKUMCP_PUBLIC_URL,
+    isProduction,
+    port: e.PORT,
+  });
 
   const masterKey = loadMasterKey(e.HEROKUMCP_MASTER_KEY);
 
@@ -112,8 +133,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
   const cfg: Config = {
     port: e.PORT,
-    isProduction: (e.NODE_ENV ?? '').toLowerCase() === 'production',
-    publicUrl: trimSlash(publicUrl)!,
+    isProduction,
+    publicUrlResolver,
+    // Backed by the resolver: reads inside request handlers see the resolved
+    // value; reading before any request (production, unresolved) throws.
+    get publicUrl(): string {
+      return publicUrlResolver.getOrThrow();
+    },
     databaseUrl: e.DATABASE_URL,
     dbPoolMax: e.HEROKUMCP_DB_POOL_MAX,
     dbSsl: e.HEROKUMCP_DB_SSL,
@@ -137,39 +163,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return cfg;
 }
 
-/**
- * Resolve the external base URL the server advertises (OAuth metadata, callback
- * URLs, .well-known docs). Precedence:
- *
- *   1. HEROKUMCP_PUBLIC_URL — explicit operator override always wins.
- *   2. HEROKU_APP_DEFAULT_DOMAIN_NAME — Heroku Dyno Metadata. Includes the full
- *      randomized suffix Heroku now assigns (e.g. app-5fc113ad890b.herokuapp.com),
- *      so it's correct even on Button deploys where the operator can't predict it.
- *   3. HEROKU_APP_NAME — legacy-style guess (app.herokuapp.com). Only correct for
- *      older apps without a suffixed default domain, but better than failing.
- *
- * Heroku Dyno Metadata is opt-in (`heroku labs:enable runtime-dyno-metadata`),
- * so when none of the above are present we fail with an actionable message.
- */
-function resolvePublicUrl(e: EnvOutput): string {
-  if (e.HEROKUMCP_PUBLIC_URL) {
-    return e.HEROKUMCP_PUBLIC_URL;
-  }
-  if (e.HEROKU_APP_DEFAULT_DOMAIN_NAME) {
-    return `https://${e.HEROKU_APP_DEFAULT_DOMAIN_NAME}`;
-  }
-  if (e.HEROKU_APP_NAME) {
-    return `https://${e.HEROKU_APP_NAME}.herokuapp.com`;
-  }
-  throw new Error(
-    'Invalid environment:\n' +
-      '  - HEROKUMCP_PUBLIC_URL is not set and could not be auto-detected from Heroku Dyno Metadata.\n' +
-      '    Either set HEROKUMCP_PUBLIC_URL explicitly (e.g. https://herokumcp.example.com),\n' +
-      '    or enable Heroku Labs Dyno Metadata and redeploy:\n' +
-      '      heroku labs:enable runtime-dyno-metadata -a <appname>',
-  );
-}
-
 function parseCommaList(s: string | undefined): string[] | undefined {
   if (s === undefined) return undefined;
   const parts = s
@@ -181,11 +174,6 @@ function parseCommaList(s: string | undefined): string[] | undefined {
 
 function normalizeEmail(s: string): string {
   return s.trim().toLowerCase();
-}
-
-function trimSlash(s: string | undefined): string | undefined {
-  if (!s) return undefined;
-  return s.endsWith('/') ? s.slice(0, -1) : s;
 }
 
 /** Capture a sanitized snapshot of relevant env vars for /admin/config. Secrets

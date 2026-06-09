@@ -14,7 +14,7 @@ import { buildApp } from './app.js';
 import type { HerokuOAuthConfig } from './oauth/heroku.js';
 import { pruneAuditEntries } from './db/repos/audit-log.js';
 
-export const PACKAGE_VERSION = '0.2.4';
+export const PACKAGE_VERSION = '0.2.5';
 
 export async function main(): Promise<void> {
   const cfg = loadConfig();
@@ -32,13 +32,17 @@ export async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const publicUrl =
-    cfg.publicUrl ?? `${cfg.isProduction ? 'https' : 'http'}://localhost:${cfg.port}`;
   const oauthCfg: HerokuOAuthConfig = {
     clientId: cfg.oauth.clientId,
     clientSecret: cfg.oauth.clientSecret,
     scope: cfg.oauth.scope,
-    redirectUri: `${publicUrl}/oauth/callback`,
+    // Lazily derived from cfg.publicUrl (resolver-backed). This getter is only
+    // evaluated inside request handlers (sign-in / oauth callback), by which
+    // point the public URL has been resolved from the first request — so we
+    // never need to know the public hostname at boot.
+    get redirectUri(): string {
+      return `${cfg.publicUrl}/oauth/callback`;
+    },
     authorizeUrl: cfg.oauth.authorizeUrl,
     tokenUrl: cfg.oauth.tokenUrl,
     apiBaseUrl: cfg.herokuApiBaseUrl,
@@ -75,6 +79,13 @@ export async function main(): Promise<void> {
   log(
     'info',
     `herokumcp-platform-server v${PACKAGE_VERSION} starting on :${cfg.port} (master-key fp ${masterKeyFingerprint(cfg.masterKey)})`,
+  );
+  const resolvedUrl = cfg.publicUrlResolver.peek();
+  log(
+    'info',
+    resolvedUrl
+      ? `public URL: ${resolvedUrl} (${cfg.publicUrlResolver.source()})`
+      : 'public URL: will be resolved from the first inbound request',
   );
 
   const server = serve({

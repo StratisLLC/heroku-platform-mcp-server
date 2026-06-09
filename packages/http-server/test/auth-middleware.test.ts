@@ -9,6 +9,7 @@ import {
   type AppEnv,
 } from '../src/auth/middleware.js';
 import { hashToken, mintConnectionToken } from '../src/auth/connection-token.js';
+import { PublicUrlResolver } from '../src/public-url.js';
 import {
   sealSession,
   WEB_SESSION_COOKIE,
@@ -25,7 +26,11 @@ function makeApp(adminEmails: string[] = []) {
     pool: pool as never,
     masterKey,
     adminEmails,
-    publicUrl: 'https://test.example.com',
+    publicUrlResolver: new PublicUrlResolver({
+      explicit: 'https://test.example.com',
+      isProduction: true,
+      port: 3000,
+    }),
   };
   app.use('/web/*', webSessionAuth(mwDeps));
   app.use('/web/admin/*', requireAdmin());

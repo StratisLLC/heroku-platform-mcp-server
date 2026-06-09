@@ -42,6 +42,7 @@ import { buildAdminRoutes } from './routes/admin.js';
 import { buildMcpRoutes } from './routes/mcp.js';
 import { buildWellKnownRoutes } from './routes/wellknown.js';
 import { buildDcrRoutes } from './oauth-provider/dcr.js';
+import { publicUrlMiddleware } from './middleware/public-url.js';
 import { buildAuthorizeRoutes } from './oauth-provider/authorize.js';
 import { buildTokenRoutes } from './oauth-provider/token.js';
 import { buildRevokeRoutes } from './oauth-provider/revoke.js';
@@ -74,10 +75,15 @@ export function buildApp(opts: BuildAppOptions): BuiltApp {
     pool: opts.pool,
     masterKey: opts.cfg.masterKey,
     adminEmails: opts.cfg.adminEmails,
-    publicUrl: opts.cfg.publicUrl,
+    publicUrlResolver: opts.cfg.publicUrlResolver,
   };
 
   const app = new Hono<AppEnv>();
+
+  // FIRST middleware on every request: let the resolver lock in the public URL
+  // from this request's Host headers (no-op once resolved). Must run before any
+  // handler that reads cfg.publicUrl.
+  app.use('*', publicUrlMiddleware(opts.cfg.publicUrlResolver));
 
   // Top-level web session resolution for all non-/mcp routes.
   app.use('*', async (c, next) => {
@@ -96,10 +102,10 @@ export function buildApp(opts: BuildAppOptions): BuiltApp {
   // OAuth 2.0 discovery documents — mounted before public so they are
   // unauthenticated and not subject to the session-cookie reader (which is
   // harmless but unnecessary).
-  app.route('/', buildWellKnownRoutes({ publicUrl: opts.cfg.publicUrl }));
+  app.route('/', buildWellKnownRoutes({ cfg: opts.cfg }));
 
   // OAuth provider routes (DCR, authorize, token, revoke).
-  app.route('/', buildDcrRoutes({ pool: opts.pool, publicUrl: opts.cfg.publicUrl }));
+  app.route('/', buildDcrRoutes({ pool: opts.pool, cfg: opts.cfg }));
   app.route(
     '/',
     buildAuthorizeRoutes({

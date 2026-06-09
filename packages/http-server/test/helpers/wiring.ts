@@ -9,6 +9,7 @@ import { buildApp } from '../../src/app.js';
 import { TransportManager } from '../../src/mcp/transport.js';
 import { createFakePool, type FakePool } from './fake-pool.js';
 import type { Config } from '../../src/config.js';
+import { PublicUrlResolver } from '../../src/public-url.js';
 import type { AppEnv } from '../../src/auth/middleware.js';
 import type { HerokuOAuthConfig } from '../../src/oauth/heroku.js';
 
@@ -34,6 +35,11 @@ export function buildRig(opts: BuildRigOptions = {}): TestRig {
     port: 0,
     isProduction: false,
     publicUrl: 'https://test.example.com',
+    publicUrlResolver: new PublicUrlResolver({
+      explicit: 'https://test.example.com',
+      isProduction: false,
+      port: 0,
+    }),
     databaseUrl: 'postgres://fake',
     dbPoolMax: 1,
     dbSsl: 'off',

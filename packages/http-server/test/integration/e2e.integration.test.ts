@@ -18,6 +18,7 @@ import { buildApp } from '../../src/app.js';
 import { runMigrations } from '../../src/db/migrate.js';
 import { TransportManager } from '../../src/mcp/transport.js';
 import type { Config } from '../../src/config.js';
+import { PublicUrlResolver } from '../../src/public-url.js';
 import type { HerokuOAuthConfig } from '../../src/oauth/heroku.js';
 import type { AppEnv } from '../../src/auth/middleware.js';
 
@@ -44,6 +45,11 @@ describeIfDb('http-server e2e (real Postgres + mocked Heroku)', () => {
       port: 0,
       isProduction: false,
       publicUrl: 'http://localhost:0',
+      publicUrlResolver: new PublicUrlResolver({
+        explicit: 'http://localhost:0',
+        isProduction: false,
+        port: 0,
+      }),
       databaseUrl: DB_URL!,
       dbPoolMax: 5,
       dbSsl: 'off',

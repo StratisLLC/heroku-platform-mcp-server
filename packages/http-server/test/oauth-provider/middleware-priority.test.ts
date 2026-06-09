@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 import { generateMasterKey } from '@heroku-mcp/core';
 import { bearerAuth, type AppEnv } from '../../src/auth/middleware.js';
+import { PublicUrlResolver } from '../../src/public-url.js';
 import {
   hashToken,
   mintConnectionToken,
@@ -29,7 +30,11 @@ function makeApp() {
       pool: pool as never,
       masterKey,
       adminEmails: [],
-      publicUrl: PUBLIC_URL,
+      publicUrlResolver: new PublicUrlResolver({
+        explicit: PUBLIC_URL,
+        isProduction: true,
+        port: 3000,
+      }),
     }),
   );
   app.get('/api/echo', (c) => {

@@ -11,6 +11,7 @@
 
 import type { Context, Next } from 'hono';
 import type pg from 'pg';
+import type { PublicUrlResolver } from '../public-url.js';
 import {
   findActiveTokenByHash,
   touchTokenLastUsed,
@@ -47,9 +48,11 @@ export interface MiddlewareDeps {
   pool: pg.Pool;
   masterKey: Uint8Array;
   adminEmails: string[];
-  /** Base URL used to build the WWW-Authenticate `resource_metadata` parameter
-   *  on 401 — this is how Claude Desktop discovers our auth server. */
-  publicUrl: string;
+  /** Resolves the base URL used to build the WWW-Authenticate `resource_metadata`
+   *  parameter on 401 — this is how Claude Desktop discovers our auth server.
+   *  Read inside the handler (per request), after the public-url middleware has
+   *  had a chance to resolve it. */
+  publicUrlResolver: PublicUrlResolver;
 }
 
 /**
@@ -73,9 +76,10 @@ export interface MiddlewareDeps {
  */
 export function bearerAuth(deps: MiddlewareDeps) {
   const unauth = (c: Context<AppEnv>, message: string): Response => {
+    const base = deps.publicUrlResolver.getOrThrow().replace(/\/$/, '');
     c.header(
       'WWW-Authenticate',
-      `Bearer resource_metadata="${deps.publicUrl.replace(/\/$/, '')}/.well-known/oauth-protected-resource"`,
+      `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`,
     );
     return c.json({ ok: false, error: { kind: 'auth', message } }, 401);
   };
