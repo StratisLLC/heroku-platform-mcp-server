@@ -21,11 +21,29 @@
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { NotFoundError } from '@heroku-mcp/core';
-import { ok, runTool } from '@heroku-mcp/platform';
+import { InvalidParamsError, NotFoundError, assertConfirm } from '@heroku-mcp/core';
+import { envelopeFromLocal, ok, runTool } from '@heroku-mcp/platform';
 import type { ToolContext } from '@heroku-mcp/platform';
-import { assertFamilyAvailable, dataUrl, DATA_API_ACCEPT, getData, seg } from '../client.js';
-import { backupInput, backupListInput, databaseInput, type PgList, type PgRecord } from '../types.js';
+import {
+  assertFamilyAvailable,
+  dataUrl,
+  DATA_API_ACCEPT,
+  deleteData,
+  getData,
+  postData,
+  seg,
+} from '../client.js';
+import { resolveDatabaseId, resolveOwningApp } from '../resolve.js';
+import {
+  backupInput,
+  backupListInput,
+  backupsCaptureInput,
+  backupsDeleteInput,
+  backupsScheduleInput,
+  databaseInput,
+  type PgList,
+  type PgRecord,
+} from '../types.js';
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
 const obj = (v: unknown): PgRecord | undefined =>
@@ -136,6 +154,165 @@ export function registerBackupTools(server: McpServer, ctx: ToolContext): void {
         const res = await getData<PgList>(ctx, `/databases/${seg(database)}/transfer-schedules`, {
           tool: 'pg_backups_schedules',
         });
+        return ok(res);
+      }),
+  );
+}
+
+/** A captured/deleted transfer's `to_url` is a presigned S3 URL carrying an AWS
+ *  `secret_access_key` and `session_token`. Strip it before the envelope reaches
+ *  the model (mirrors {@link redactPgInfo}'s treatment of `resource_url`). The
+ *  `from_url` is a credential-free `postgres://host:port/db` string and is kept. */
+export function redactTransfer(body: unknown): unknown {
+  const record = obj(body);
+  if (!record) return body;
+  const out: PgRecord = { ...record };
+  delete out.to_url;
+  return out;
+}
+
+/** IANA timezone map for the schedule `at` parser, copied from heroku/cli
+ *  pg/backups/schedule.ts so abbreviations resolve the same way. */
+const SCHEDULE_TZ: Record<string, string> = {
+  BST: 'Europe/London',
+  CDT: 'America/Chicago',
+  CEST: 'Europe/Paris',
+  CET: 'Europe/Paris',
+  CST: 'America/Chicago',
+  EDT: 'America/New_York',
+  EST: 'America/New_York',
+  GMT: 'Europe/London',
+  MDT: 'America/Boise',
+  MST: 'America/Boise',
+  PDT: 'America/Los_Angeles',
+  PST: 'America/Los_Angeles',
+  Z: 'UTC',
+};
+
+/**
+ * Parse a schedule `at` string into `{hour, timezone}`, mirroring the CLI's
+ * `parseDate` (pg/backups/schedule.ts). The grammar is strict: `HH:00` (minutes
+ * must be literally `00`) and an optional timezone (abbreviation or IANA name,
+ * defaulting to UTC). `hour` stays a STRING, exactly as the CLI sends it.
+ */
+export function parseScheduleAt(at: string): { hour: string; timezone: string } {
+  const m = /^(0?\d|1\d|2[0-3]):00 ?(\S*)$/.exec(at);
+  if (!m) {
+    throw new InvalidParamsError(
+      `Invalid schedule "${at}": expected "HH:00 [TIMEZONE]" (minutes must be 00).`,
+      { details: { at } },
+    );
+  }
+  const hour = m[1] ?? '';
+  const tz = m[2] ?? '';
+  return { hour, timezone: SCHEDULE_TZ[tz.toUpperCase()] ?? (tz.length > 0 ? tz : 'UTC') };
+}
+
+/**
+ * Resolve a backup identifier to its numeric `num`. The CLI accepts letter-
+ * prefixed names like `b001`/`a002` (`^[abcr](\d+)$`); we additionally accept a
+ * bare integer (`1`) for convenience.
+ */
+export function parseBackupNum(backupId: string): number {
+  const digits = /^[abcr]?0*(\d+)$/i.exec(backupId)?.[1];
+  const n = digits ? Number.parseInt(digits, 10) : Number.NaN;
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new InvalidParamsError(
+      `Invalid backup id "${backupId}": expected a backup num like "b001" or "1".`,
+      { details: { backup_id: backupId } },
+    );
+  }
+  return n;
+}
+
+/**
+ * Register the backup write tools (Phase 6 Part B). Derived from heroku/cli
+ * (commit `main`, fetched 2026-06-09):
+ *   src/commands/pg/backups/capture.ts  — POST /client/v11/databases/{id}/backups
+ *   src/commands/pg/backups/delete.ts   — DELETE /client/v11/apps/{app}/transfers/{num}
+ *   src/commands/pg/backups/schedule.ts — POST /client/v11/databases/{id}/transfer-schedules
+ */
+export function registerBackupWriteTools(server: McpServer, ctx: ToolContext): void {
+  server.registerTool(
+    'pg_backups_capture',
+    {
+      title: 'Postgres backup (capture)',
+      description:
+        'Capture a new logical backup of a database. Returns the in-progress transfer immediately (it does not wait for completion; check progress with pg_backups_info). The response\'s signed upload URL (to_url, which carries AWS credentials) is stripped. Wraps POST /client/v11/databases/{database}/backups (empty body). Derived from heroku/cli pg/backups/capture.ts.',
+      inputSchema: backupsCaptureInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    },
+    ({ database, wait }) =>
+      runTool(async () => {
+        assertFamilyAvailable(ctx, 'pg_backups', 'Postgres backups');
+        const dbId = await resolveDatabaseId(database, ctx, 'pg_backups_capture');
+        const res = await postData<PgRecord>(ctx, `/databases/${seg(dbId)}/backups`, null, {
+          tool: 'pg_backups_capture',
+        });
+        const data = redactTransfer(res.body);
+        // `wait` is accepted for CLI parity but capture never polls; when set, we
+        // annotate the transfer so the caller knows completion wasn't awaited.
+        const annotated =
+          wait && obj(data)
+            ? {
+                ...(data as PgRecord),
+                _note:
+                  'wait is not supported here; the transfer was started and returned without polling. Use pg_backups_info to check progress.',
+              }
+            : data;
+        return envelopeFromLocal(annotated);
+      }),
+  );
+
+  server.registerTool(
+    'pg_backups_delete',
+    {
+      title: 'Postgres backup (delete)',
+      description:
+        'Delete a backup (transfer). DESTRUCTIVE: requires confirm set to the backup_id. Backups are app-scoped; the owning app is resolved from the database unless "app" is given. Wraps DELETE /client/v11/apps/{app}/transfers/{num}. Derived from heroku/cli pg/backups/delete.ts.',
+      inputSchema: backupsDeleteInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    ({ database, app, backup_id, confirm }) =>
+      runTool(async () => {
+        assertFamilyAvailable(ctx, 'pg_backups', 'Postgres backups');
+        assertConfirm({ value: confirm, expected: backup_id, targetKind: 'transfer' });
+        const appName =
+          app ?? (database ? await resolveOwningApp(database, ctx, 'pg_backups_delete') : undefined);
+        if (!appName) {
+          throw new InvalidParamsError('Provide "app" or "database" to locate the backup.', {
+            details: { backup_id },
+          });
+        }
+        const num = parseBackupNum(backup_id);
+        const res = await deleteData<PgRecord>(ctx, `/apps/${seg(appName)}/transfers/${num}`, {
+          tool: 'pg_backups_delete',
+        });
+        return envelopeFromLocal(redactTransfer(res.body));
+      }),
+  );
+
+  server.registerTool(
+    'pg_backups_schedule',
+    {
+      title: 'Postgres backup (schedule)',
+      description:
+        'Schedule automatic daily backups for a database at a given hour. The "at" string is "HH:00 [TIMEZONE]" (UTC if no timezone). Additive — does not remove existing schedules. Wraps POST /client/v11/databases/{database}/transfer-schedules. Derived from heroku/cli pg/backups/schedule.ts.',
+      inputSchema: backupsScheduleInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    },
+    ({ database, at, name }) =>
+      runTool(async () => {
+        assertFamilyAvailable(ctx, 'pg_backups', 'Postgres backups');
+        const dbId = await resolveDatabaseId(database, ctx, 'pg_backups_schedule');
+        const { hour, timezone } = parseScheduleAt(at);
+        const schedule_name = `${name ?? 'DATABASE'}_URL`;
+        const res = await postData<PgRecord>(
+          ctx,
+          `/databases/${seg(dbId)}/transfer-schedules`,
+          { hour, timezone, schedule_name },
+          { tool: 'pg_backups_schedule' },
+        );
         return ok(res);
       }),
   );

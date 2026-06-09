@@ -1,7 +1,7 @@
 {
   "name": "@heroku-mcp/postgres",
-  "version": "0.1.1",
-  "description": "Heroku Postgres MCP tools (reads + capability probing). Sibling of @heroku-mcp/platform; registered alongside it by the hosted HTTP server.",
+  "version": "0.2.0",
+  "description": "Heroku Postgres MCP tools (reads, writes + capability probing). Sibling of @heroku-mcp/platform; registered alongside it by the hosted HTTP server.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",

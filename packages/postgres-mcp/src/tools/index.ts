@@ -15,8 +15,9 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { tierAvailable } from '@heroku-mcp/platform';
 import type { ToolContext } from '@heroku-mcp/platform';
-import { registerBackupTools } from './backups.js';
+import { registerBackupTools, registerBackupWriteTools } from './backups.js';
 import { registerConfigTools } from './config.js';
+import { registerCredentialWriteTools } from './credentials.js';
 import { registerFollowerTools } from './followers.js';
 import { registerInventoryTools } from './inventory.js';
 
@@ -38,5 +39,8 @@ export function registerPostgresTools(
   registerBackupTools(server, ctx);
   registerFollowerTools(server, ctx);
   registerConfigTools(server, ctx);
+  // Phase 6 Part B — write/mutation tools.
+  registerCredentialWriteTools(server, ctx);
+  registerBackupWriteTools(server, ctx);
   return { postgres: true };
 }

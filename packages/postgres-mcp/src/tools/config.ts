@@ -27,10 +27,12 @@
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { assertConfirm } from '@heroku-mcp/core';
 import { ok, runTool } from '@heroku-mcp/platform';
 import type { ToolContext } from '@heroku-mcp/platform';
-import { getData, seg } from '../client.js';
-import { databaseInput, type PgRecord } from '../types.js';
+import { getData, postDataMaint, seg } from '../client.js';
+import { resolveDatabaseId, resolveDatabaseName } from '../resolve.js';
+import { databaseInput, maintenanceWindowSetInput, type PgRecord } from '../types.js';
 
 /** Register the configuration & monitoring read tools. */
 export function registerConfigTools(server: McpServer, ctx: ToolContext): void {
@@ -48,6 +50,30 @@ export function registerConfigTools(server: McpServer, ctx: ToolContext): void {
         const res = await getData<PgRecord>(ctx, `/databases/${seg(database)}/maintenance`, {
           tool: 'pg_maintenance_window',
         });
+        return ok(res);
+      }),
+  );
+
+  server.registerTool(
+    'pg_maintenance_window_set',
+    {
+      title: 'Postgres maintenance window (set)',
+      description:
+        'Set the weekly UTC maintenance window for a database to a day-of-week and time-of-day (e.g. "sunday" + "13:30"). MUTATING: requires confirm set to the database add-on name. Not available on Essential-tier plans. Wraps POST /data/maintenances/v1/{database}/window. Derived from heroku/cli data/maintenances/window/update.ts.',
+      inputSchema: maintenanceWindowSetInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    ({ database, day_of_week, time_of_day, confirm }) =>
+      runTool(async () => {
+        const dbName = await resolveDatabaseName(database, ctx, 'pg_maintenance_window_set');
+        assertConfirm({ value: confirm, expected: dbName, targetKind: 'addon' });
+        const dbId = await resolveDatabaseId(database, ctx, 'pg_maintenance_window_set');
+        const res = await postDataMaint<PgRecord>(
+          ctx,
+          `/${seg(dbId)}/window`,
+          { day_of_week, time_of_day },
+          { tool: 'pg_maintenance_window_set' },
+        );
         return ok(res);
       }),
   );

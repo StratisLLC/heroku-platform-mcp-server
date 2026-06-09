@@ -39,6 +39,13 @@ export const DATA_API_PREFIX = '/client/v11';
 /** Basic-auth path prefix for the Data API (`/postgres/v0/*`). */
 export const POSTGRES_V0_PREFIX = '/postgres/v0';
 
+/** Bearer-auth path prefix for the Data *maintenances* API. Distinct from
+ *  `/client/v11/*`: the CLI's `data:maintenances:*` commands talk to
+ *  `/data/maintenances/v1/*` on the same host (see
+ *  heroku/cli `src/lib/data/base-command.ts`, which sets the client host to
+ *  `utils.pg.host()` = api.data.heroku.com). Used by `pg_maintenance_window_set`. */
+export const DATA_MAINT_PREFIX = '/data/maintenances/v1';
+
 /** The Data API returns plain JSON; it does not negotiate the Platform API's
  *  `vnd.heroku+json` media type. */
 export const DATA_API_ACCEPT = 'application/json';
@@ -54,6 +61,11 @@ export function dataUrl(suffix: string): string {
 /** Build an absolute `/postgres/v0/*` (Basic) Data API URL from a suffix. */
 export function pgV0Url(suffix: string): string {
   return `${DATA_API_BASE}${POSTGRES_V0_PREFIX}${suffix.startsWith('/') ? suffix : `/${suffix}`}`;
+}
+
+/** Build an absolute `/data/maintenances/v1/*` (Bearer) Data API URL. */
+export function dataMaintUrl(suffix: string): string {
+  return `${DATA_API_BASE}${DATA_MAINT_PREFIX}${suffix.startsWith('/') ? suffix : `/${suffix}`}`;
 }
 
 /** Construct the `/postgres/v0/*` HTTP Basic auth header value: an empty
@@ -86,6 +98,86 @@ export async function getDataBasic<T>(
   return ctx.client.get<T>(pgV0Url(suffix), {
     tool: opts.tool,
     headers: { Accept: DATA_API_ACCEPT, Authorization: authorization },
+  });
+}
+
+/** POST a `/client/v11/*` (Bearer) Data API endpoint. `body` is omitted from the
+ *  wire when undefined, matching the empty-body POSTs several pg writes use
+ *  (capture, connection_reset). */
+export function postData<T>(
+  ctx: ToolContext,
+  suffix: string,
+  body: unknown,
+  opts: { tool: string },
+): Promise<ClientSuccess<T>> {
+  return ctx.client.request<T>({
+    path: dataUrl(suffix),
+    method: 'POST',
+    body: body ?? null,
+    tool: opts.tool,
+    headers: { Accept: DATA_API_ACCEPT },
+  });
+}
+
+/** DELETE a `/client/v11/*` (Bearer) Data API endpoint. */
+export function deleteData<T>(
+  ctx: ToolContext,
+  suffix: string,
+  opts: { tool: string },
+): Promise<ClientSuccess<T>> {
+  return ctx.client.request<T>({
+    path: dataUrl(suffix),
+    method: 'DELETE',
+    tool: opts.tool,
+    headers: { Accept: DATA_API_ACCEPT },
+  });
+}
+
+/** POST a `/postgres/v0/*` (Basic) Data API endpoint. */
+export async function postDataBasic<T>(
+  ctx: ToolContext,
+  suffix: string,
+  body: unknown,
+  opts: { tool: string },
+): Promise<ClientSuccess<T>> {
+  const authorization = await basicAuthHeader(ctx);
+  return ctx.client.request<T>({
+    path: pgV0Url(suffix),
+    method: 'POST',
+    body: body ?? null,
+    tool: opts.tool,
+    headers: { Accept: DATA_API_ACCEPT, Authorization: authorization },
+  });
+}
+
+/** DELETE a `/postgres/v0/*` (Basic) Data API endpoint. */
+export async function deleteDataBasic<T>(
+  ctx: ToolContext,
+  suffix: string,
+  opts: { tool: string },
+): Promise<ClientSuccess<T>> {
+  const authorization = await basicAuthHeader(ctx);
+  return ctx.client.request<T>({
+    path: pgV0Url(suffix),
+    method: 'DELETE',
+    tool: opts.tool,
+    headers: { Accept: DATA_API_ACCEPT, Authorization: authorization },
+  });
+}
+
+/** POST a `/data/maintenances/v1/*` (Bearer) Data API endpoint. */
+export function postDataMaint<T>(
+  ctx: ToolContext,
+  suffix: string,
+  body: unknown,
+  opts: { tool: string },
+): Promise<ClientSuccess<T>> {
+  return ctx.client.request<T>({
+    path: dataMaintUrl(suffix),
+    method: 'POST',
+    body: body ?? null,
+    tool: opts.tool,
+    headers: { Accept: DATA_API_ACCEPT },
   });
 }
 

@@ -14,10 +14,19 @@
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { assertConfirm } from '@heroku-mcp/core';
 import { envelopeFromLocal, ok, runTool } from '@heroku-mcp/platform';
 import type { ToolContext } from '@heroku-mcp/platform';
-import { assertFamilyAvailable, getData, getDataBasic, seg } from '../client.js';
-import { appInput, credentialInput, databaseInput, type PgList, type PgRecord } from '../types.js';
+import { assertFamilyAvailable, getData, getDataBasic, postData, seg } from '../client.js';
+import { resolveDatabaseId, resolveDatabaseName } from '../resolve.js';
+import {
+  appInput,
+  connectionResetInput,
+  credentialInput,
+  databaseInput,
+  type PgList,
+  type PgRecord,
+} from '../types.js';
 
 /** Heroku add-on service name for Postgres. */
 const POSTGRES_SERVICE = 'heroku-postgresql';
@@ -141,6 +150,29 @@ export function registerInventoryTools(server: McpServer, ctx: ToolContext): voi
           { tool: 'pg_credentials_url' },
         );
         return envelopeFromLocal({ connection_url: connectionUrlFrom(res.body) });
+      }),
+  );
+
+  // Connection management (write). Database-scoped, so it lives alongside the
+  // other database-level tools rather than in its own file.
+  server.registerTool(
+    'pg_connection_reset',
+    {
+      title: 'Postgres connections (reset)',
+      description:
+        'Terminate all active connections for all credentials on a database (the `pg:killall` operation). MUTATING: requires confirm set to the database add-on name. Apps will reconnect on their next query. Distinct from killing a single backend PID, which needs a direct Postgres connection and is out of scope. Wraps POST /client/v11/databases/{database}/connection_reset. Derived from heroku/cli pg/killall.ts (the CLI itself takes no confirm; we add one).',
+      inputSchema: connectionResetInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    ({ database, confirm }) =>
+      runTool(async () => {
+        const dbName = await resolveDatabaseName(database, ctx, 'pg_connection_reset');
+        assertConfirm({ value: confirm, expected: dbName, targetKind: 'addon' });
+        const dbId = await resolveDatabaseId(database, ctx, 'pg_connection_reset');
+        const res = await postData<PgRecord>(ctx, `/databases/${seg(dbId)}/connection_reset`, null, {
+          tool: 'pg_connection_reset',
+        });
+        return ok(res);
       }),
   );
 }
