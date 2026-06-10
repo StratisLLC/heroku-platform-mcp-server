@@ -250,15 +250,28 @@ export const PLATFORM_PROBES: readonly Probe[] = Object.freeze([
     forbiddenCodes: [401, 402, 403],
   },
   {
+    // Like Postgres and Key-Value, the Heroku Data API has no probeable Kafka
+    // "root": the old `HEAD /data/kafka` returns 404 (no such resource), which
+    // the prior `forbiddenCodes:[403,404]` mis-classified as forbidden —
+    // marking the tier unavailable and hiding every Kafka tool. Instead we GET a
+    // deliberately-nonexistent cluster UUID under the real
+    // `/data/kafka/v0/clusters/{id}` namespace the tools use, with HTTP Basic
+    // auth (empty user, OAuth token as password). A 404 means "endpoint
+    // reachable + auth accepted, no such cluster" → the tier is available; a
+    // 401/402/403 means the token can't reach the Kafka Data API at all.
+    // Verified live 2026-06-10 against kafka-clean-72346: `HEAD /data/kafka` →
+    // 404 (would read as forbidden), `GET /data/kafka/v0/clusters/{zero-uuid}` →
+    // 404 with both Bearer and Basic.
     id: 'data.kafka_root',
     tier: 'data.kafka',
-    method: 'HEAD',
-    path: '/data/kafka',
+    method: 'GET',
+    path: '/data/kafka/v0/clusters/00000000-0000-0000-0000-000000000000',
     base: 'data',
+    authScheme: 'basic',
     required: false,
-    successCodes: [200, 204],
+    successCodes: [200, 204, 404],
     emptyOkCodes: [],
-    forbiddenCodes: [403, 404],
+    forbiddenCodes: [401, 402, 403],
   },
 ]);
 
@@ -438,6 +451,60 @@ export const KEYVALUE_PROBES: readonly Probe[] = Object.freeze([
     emptyOkCodes: EMPTY_OK,
     forbiddenCodes: FORBIDDEN,
     dependsOn: 'data.redis_root',
+  },
+]);
+
+/**
+ * Heroku Kafka probes (Kafka Part A).
+ *
+ * Mirrors {@link KEYVALUE_PROBES}: the package-level gate is the `data.kafka`
+ * root tier (see {@link PLATFORM_PROBES}'s `data.kafka_root`), and the sub-tiers
+ * below let the topic and consumer-group tool families detect availability
+ * without blindly calling the endpoint. Unlike Key-Value's `/redis/v0/*`, the
+ * Kafka control plane keeps the `/data` prefix: every endpoint lives under
+ * `/data/kafka/v0/clusters/{cluster_uuid}/*`, addressed by the add-on UUID (the
+ * add-on NAME returns 404 — verified live 2026-06-10). All take HTTP Basic auth
+ * (empty username, OAuth token as password) — both Basic and Bearer return 200,
+ * we use Basic for symmetry with Postgres and Key-Value. A deliberately-
+ * nonexistent cluster id returns 404 ("reachable, no such cluster" = available);
+ * a 402/403 is "gated".
+ *
+ * Note the consumer-groups path uses an UNDERSCORE (`/consumer_groups`), not a
+ * hyphen — verified live (the hyphenated form 404s).
+ */
+const KAFKA_PROBE_CLUSTER_ID = '00000000-0000-0000-0000-000000000000';
+
+export const KAFKA_PROBES: readonly Probe[] = Object.freeze([
+  {
+    // Topic reads (`kafka_topics_list`, `kafka_topics_info`) hit
+    // `/data/kafka/v0/clusters/{id}/topics`. Basic auth, same as the root. A
+    // nonexistent cluster returns 404 here ("reachable" = available).
+    id: 'kafka.api.topics',
+    tier: 'data.kafka_topics',
+    method: 'GET',
+    path: `/data/kafka/v0/clusters/${KAFKA_PROBE_CLUSTER_ID}/topics`,
+    base: 'data',
+    authScheme: 'basic',
+    required: false,
+    successCodes: SUCCESS,
+    emptyOkCodes: EMPTY_OK,
+    forbiddenCodes: FORBIDDEN,
+    dependsOn: 'data.kafka_root',
+  },
+  {
+    // Consumer-group reads (`kafka_consumer_groups_list`) hit
+    // `/data/kafka/v0/clusters/{id}/consumer_groups` (underscore). Basic auth.
+    id: 'kafka.api.consumer_groups',
+    tier: 'data.kafka_consumer_groups',
+    method: 'GET',
+    path: `/data/kafka/v0/clusters/${KAFKA_PROBE_CLUSTER_ID}/consumer_groups`,
+    base: 'data',
+    authScheme: 'basic',
+    required: false,
+    successCodes: SUCCESS,
+    emptyOkCodes: EMPTY_OK,
+    forbiddenCodes: FORBIDDEN,
+    dependsOn: 'data.kafka_root',
   },
 ]);
 

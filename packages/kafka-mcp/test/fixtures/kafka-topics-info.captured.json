@@ -1,0 +1,26 @@
+{
+  "attachment_name": "KAFKA_URL",
+  "prefix": "pearl-60818.",
+  "topics": [
+    {
+      "name": "mcp-test-topic",
+      "prefix": "pearl-60818.",
+      "messages_in_per_second": 0,
+      "bytes_in_per_second": 0,
+      "bytes_out_per_second": 0,
+      "partitions": 8,
+      "replication_factor": 3,
+      "status": "green",
+      "status_label": "healthy",
+      "data_size": 0,
+      "compaction": false,
+      "retention_time_ms": 86400000,
+      "cleanup_policy": "delete",
+      "compaction_enabled": false,
+      "retention_enabled": true
+    }
+  ],
+  "limits": {
+    "max_topics": 40
+  }
+}

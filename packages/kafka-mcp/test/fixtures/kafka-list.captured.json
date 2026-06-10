@@ -1,0 +1,41 @@
+[
+  {
+    "actions": [],
+    "app": {
+      "id": "7a98123c-a216-482f-b39e-a251f2262269",
+      "name": "dm-kafkatest"
+    },
+    "config_vars": [
+      "KAFKA_CLIENT_CERT",
+      "KAFKA_CLIENT_CERT_KEY",
+      "KAFKA_PREFIX",
+      "KAFKA_TRUSTED_CERT",
+      "KAFKA_URL"
+    ],
+    "created_at": "2026-06-10T13:57:20Z",
+    "id": "a47a6373-58fd-46bd-886d-9f505a8812ad",
+    "name": "kafka-clean-72346",
+    "addon_service": {
+      "id": "77033a4f-d3aa-4c46-83e4-95b003633a68",
+      "name": "heroku-kafka"
+    },
+    "plan": {
+      "id": "765f0bbf-61b4-4a1e-a56f-7fd4dab8834b",
+      "name": "heroku-kafka:basic-0"
+    },
+    "billing_entity": {
+      "id": "7a98123c-a216-482f-b39e-a251f2262269",
+      "name": "dm-kafkatest",
+      "type": "app"
+    },
+    "provider_id": "a47a6373-58fd-46bd-886d-9f505a8812ad",
+    "state": "provisioned",
+    "updated_at": "2026-06-10T13:58:15Z",
+    "web_url": "https://addons-sso.heroku.com/apps/7a98123c-a216-482f-b39e-a251f2262269/addons/a47a6373-58fd-46bd-886d-9f505a8812ad",
+    "billed_price": {
+      "cents": 10000,
+      "contract": false,
+      "unit": "month"
+    }
+  }
+]
