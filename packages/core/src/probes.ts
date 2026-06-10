@@ -227,15 +227,27 @@ export const PLATFORM_PROBES: readonly Probe[] = Object.freeze([
     forbiddenCodes: [401, 402, 403], // unauthorized / payment required / forbidden
   },
   {
+    // Like Postgres, the Heroku Data API has no probeable Key-Value "root":
+    // `HEAD /redis` returns 404 (no such resource), which the old probe
+    // mis-classified as forbidden — marking the tier unavailable and hiding
+    // every Key-Value tool. Instead we GET a deliberately-nonexistent database
+    // UUID under the real `/redis/v0/databases/{id}` namespace the tools use,
+    // with the same HTTP Basic auth (empty user, OAuth token as password). A
+    // 404 means "endpoint reachable + auth accepted, no such DB" → the tier is
+    // available; a 401/402/403 means the token can't reach the Key-Value Data
+    // API at all. Verified live 2026-06-10: `HEAD /redis` → 404 (would read as
+    // forbidden), `GET /redis/v0/databases/{zero-uuid}` → 404 with both Bearer
+    // and Basic.
     id: 'data.redis_root',
     tier: 'data.redis',
-    method: 'HEAD',
-    path: '/redis',
+    method: 'GET',
+    path: '/redis/v0/databases/00000000-0000-0000-0000-000000000000',
     base: 'data',
+    authScheme: 'basic',
     required: false,
-    successCodes: [200, 204],
+    successCodes: [200, 204, 404],
     emptyOkCodes: [],
-    forbiddenCodes: [403, 404],
+    forbiddenCodes: [401, 402, 403],
   },
   {
     id: 'data.kafka_root',
@@ -388,6 +400,44 @@ export const POSTGRES_PROBES: readonly Probe[] = Object.freeze([
     emptyOkCodes: EMPTY_OK,
     forbiddenCodes: FORBIDDEN,
     dependsOn: 'data.postgres_root',
+  },
+]);
+
+/**
+ * Heroku Key-Value Store (Redis) probes (Key-Value Part A).
+ *
+ * Mirrors {@link POSTGRES_PROBES}: the package-level gate is the `data.redis`
+ * root tier (see {@link PLATFORM_PROBES}'s `data.redis_root`), and the sub-tier
+ * below lets the config-mutation tool family detect availability without
+ * blindly calling the endpoint. All Key-Value Data API endpoints live under the
+ * `/redis/v0/*` namespace, which takes HTTP Basic auth (empty username, OAuth
+ * token as password) — NOT Bearer. A deliberately-nonexistent database id
+ * returns 404 ("reachable, no such DB" = available); a 402/403 is "gated".
+ *
+ * NOTE: there is no separate credentials sub-probe. Unlike Postgres, the
+ * Heroku CLI's `redis:credentials` reads the connection URL straight out of the
+ * `GET /redis/v0/databases/{id}` info body (there is no `/credentials`
+ * sub-resource), so credentials reachability is already covered by the
+ * `data.redis_root` probe. Verified live 2026-06-10.
+ */
+const KV_PROBE_DB_ID = '00000000-0000-0000-0000-000000000000';
+
+export const KEYVALUE_PROBES: readonly Probe[] = Object.freeze([
+  {
+    // Config reads/writes (maxmemory policy, idle timeout, keyspace
+    // notifications) hit `/redis/v0/databases/{id}/config`. Basic auth, same as
+    // the root. A nonexistent DB returns 404 here ("reachable" = available).
+    id: 'kv.api.config',
+    tier: 'data.kv_config',
+    method: 'GET',
+    path: `/redis/v0/databases/${KV_PROBE_DB_ID}/config`,
+    base: 'data',
+    authScheme: 'basic',
+    required: false,
+    successCodes: SUCCESS,
+    emptyOkCodes: EMPTY_OK,
+    forbiddenCodes: FORBIDDEN,
+    dependsOn: 'data.redis_root',
   },
 ]);
 

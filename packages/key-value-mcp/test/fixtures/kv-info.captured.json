@@ -1,0 +1,101 @@
+{
+  "addon_id": "03a8ea32-bbc7-49ac-afac-e20dd35895bb",
+  "name": "redis-shallow-89243",
+  "plan": "mini",
+  "created_at": "2026-06-09 19:31:45 +0000",
+  "formation": {
+    "id": "c3514dff-742f-4ed3-a81b-5030745da13f",
+    "primary": "05afe685-8a85-4ce8-bd7a-468ec7dd11e9"
+  },
+  "metaas_source": "dod-redis://05afe685-8a85-4ce8-bd7a-468ec7dd11e9",
+  "port": 17929,
+  "resource_url": "rediss://:REDACTED_TEST_PASSWORD@ec2-44-193-54-204.compute-1.amazonaws.com:17930",
+  "info": [
+    {
+      "name": "Plan",
+      "values": [
+        "Mini"
+      ]
+    },
+    {
+      "name": "Status",
+      "values": [
+        "available"
+      ]
+    },
+    {
+      "name": "Created",
+      "values": [
+        "2026-06-09 19:31 "
+      ]
+    },
+    {
+      "name": "Version",
+      "values": [
+        "8.1.7"
+      ]
+    },
+    {
+      "name": "Timeout",
+      "values": [
+        300
+      ]
+    },
+    {
+      "name": "Maxmemory",
+      "values": [
+        "25 MB"
+      ]
+    },
+    {
+      "name": "Maxmemory Policy",
+      "values": [
+        "noeviction"
+      ]
+    },
+    {
+      "name": "Maintenance",
+      "values": [
+        "not required"
+      ]
+    },
+    {
+      "name": "Maintenance Window",
+      "values": [
+        "Fridays 17:30 to 21:30 UTC"
+      ]
+    },
+    {
+      "name": "Persistence",
+      "values": [
+        "None"
+      ]
+    },
+    {
+      "name": "HA Status",
+      "values": [
+        "Unavailable"
+      ]
+    },
+    {
+      "name": "Requires TLS",
+      "values": [
+        "Yes"
+      ]
+    },
+    {
+      "name": "Keyspace Notifications",
+      "values": [
+        "Disabled"
+      ]
+    },
+    {
+      "name": "Plan Connection Limit",
+      "values": [
+        20
+      ]
+    }
+  ],
+  "version": "8.1.7",
+  "prefer_native_tls": true
+}
