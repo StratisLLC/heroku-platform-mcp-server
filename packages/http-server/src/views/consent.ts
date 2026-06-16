@@ -30,8 +30,9 @@ export function renderConsent(ctx: ViewerCtx, v: ConsentView): string {
       <div class="card">
         <h2>Authorize application</h2>
         <p>
-          <strong>${v.clientName}</strong> wants to access your Heroku account through this MCP
-          server, signed in as <code>${v.userEmail}</code>.
+          The application
+          <strong style="color:var(--sfdc-brand-darker)">${v.clientName}</strong> wants to access
+          your Heroku account through this MCP server, signed in as <code>${v.userEmail}</code>.
         </p>
         <p class="muted">
           You can revoke this access at any time from your <a href="/me">account page</a>.

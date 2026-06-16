@@ -90,19 +90,30 @@ export function layout(opts: LayoutOptions, body: SafeHtml): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${escapeHtml(opts.title)} — Heroku MCP</title>
+<title>${escapeHtml(opts.title)} — Heroku Platform MCP</title>
 <style>${STYLES}</style>
 </head>
 <body>
-<header>
-  <h1><a href="/" style="color:inherit;text-decoration:none">Heroku MCP</a></h1>
-  <nav>${navLinks}</nav>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="/">Heroku Platform MCP</a>
+    <nav class="site-nav">${navLinks}</nav>
+  </div>
 </header>
-<main>
+<main class="site-main">
 ${opts.banner ? opts.banner.value : ''}
 ${body.value}
 </main>
-<footer>herokumcp — hosted MCP for Heroku Platform</footer>
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-credit">
+      Published by <strong>Stratis, LLC</strong> · Apache-2.0 License
+    </div>
+    <div class="footer-attribution">
+      Salesforce and the Salesforce logo are trademarks of Salesforce, Inc. Heroku and the Heroku logo are trademarks of Salesforce, Inc. This is an independent open-source project and is not affiliated with, endorsed by, or sponsored by Salesforce.
+    </div>
+  </div>
+</footer>
 ${COPY_SCRIPT}
 </body>
 </html>`;

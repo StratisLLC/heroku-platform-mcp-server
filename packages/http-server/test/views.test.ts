@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { html, layout, raw, escapeHtml } from '../src/views/layout.js';
-import { renderAccessDenied, renderMe, renderAudit } from '../src/views/pages.js';
+import { renderAccessDenied, renderLanding, renderMe, renderAudit } from '../src/views/pages.js';
 
 const baseUser = {
   id: 'u1',
@@ -46,13 +46,37 @@ describe('escapeHtml', () => {
 describe('layout', () => {
   it('wraps body in chrome and references the title', () => {
     const out = layout({ title: 'Hello', signedIn: false, admin: false }, html`<p>hi</p>`);
-    expect(out).toContain('<title>Hello — Heroku MCP</title>');
+    expect(out).toContain('<title>Hello — Heroku Platform MCP</title>');
     expect(out).toContain('<p>hi</p>');
     expect(out).toContain('Sign in');
   });
   it('marks the active nav link', () => {
     const out = layout({ title: '/me', signedIn: true, admin: false, currentPath: '/me' }, html``);
     expect(out).toContain('href="/me" class="active"');
+  });
+});
+
+describe('renderLanding', () => {
+  it('renders the rebranded hero and sign-in CTA when signed out', () => {
+    const out = renderLanding({ signedIn: false, admin: false, currentPath: '/' });
+    // New utility classes from the rebrand are present on the landing page.
+    expect(out).toContain('class="hero"');
+    expect(out).toContain('class="eyebrow"');
+    expect(out).toContain('class="platform-tag"');
+    expect(out).toContain('section-sub');
+    expect(out).toContain('Tagged under Headless 360');
+    // Signed-out CTA.
+    expect(out).toContain('Sign in with Heroku');
+    expect(out).toContain('href="/sign-in"');
+  });
+  it('shows the account CTA and email when signed in', () => {
+    const out = renderLanding(
+      { signedIn: true, admin: false, currentPath: '/' },
+      'alice@example.com',
+    );
+    expect(out).toContain('alice@example.com');
+    expect(out).toContain('href="/me"');
+    expect(out).not.toContain('href="/sign-in"');
   });
 });
 

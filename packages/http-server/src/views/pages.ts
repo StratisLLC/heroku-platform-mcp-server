@@ -16,25 +16,57 @@ export interface ViewerCtx {
 }
 
 export function renderLanding(ctx: ViewerCtx, signedInEmail?: string): string {
-  const greeting = signedInEmail
-    ? html`<p>Signed in as <code>${signedInEmail}</code>. Visit <a href="/me">/me</a>.</p>`
-    : html`<p>Sign in with your Heroku account to get a personal MCP connection token.</p>`;
+  const signInCard = ctx.signedIn
+    ? html`
+        <div class="card">
+          <h2>You're signed in</h2>
+          <p>
+            Signed in as <code>${signedInEmail}</code>. Manage your connection tokens and connected
+            applications from your account page.
+          </p>
+          <p style="margin-top:14px">
+            <a class="btn btn-primary" href="/me">My account</a>
+          </p>
+        </div>
+      `
+    : html`
+        <div class="card">
+          <h2>Sign in</h2>
+          <p>
+            Sign in with your Heroku account to get a personal, OAuth-protected MCP connection.
+            Tools act on your behalf using your own Heroku permissions — you never share credentials
+            with the host.
+          </p>
+          <p style="margin-top:14px">
+            <a class="btn btn-primary" href="/sign-in">Sign in with Heroku</a>
+          </p>
+        </div>
+      `;
   return layout(
     { title: 'Welcome', signedIn: ctx.signedIn, admin: ctx.admin, currentPath: ctx.currentPath },
     html`
-      <div class="card">
-        <h2>Heroku MCP — hosted</h2>
-        <p>
-          This is a self-hosted Model Context Protocol server that exposes the Heroku Platform API
-          to MCP-aware AI clients (Claude Desktop, Claude Code) running on your laptop.
-        </p>
-        ${greeting}
-        <p style="margin-top:14px">
-          ${ctx.signedIn
-            ? html`<a class="btn btn-primary" href="/me">My account</a>`
-            : html`<a class="btn btn-primary" href="/sign-in">Sign in with Heroku</a>`}
-        </p>
-      </div>
+      <section class="hero">
+        <div class="hero-inner">
+          <div class="eyebrow">
+            <span class="eyebrow-dot"></span>
+            Tagged under Headless 360
+          </div>
+          <h1 class="hero-title">Heroku Platform MCP — hosted</h1>
+          <p class="hero-sub">
+            A self-hosted Model Context Protocol server that exposes the Heroku Platform API to
+            MCP-aware AI clients like Claude Desktop and Claude Code. Sign in with Heroku, and your
+            agent gets tools that act as you.
+          </p>
+          <div class="platform-tag">
+            <strong>Powered by Salesforce Platform</strong>
+            <span class="sep">·</span>
+            Self-hosted
+            <span class="sep">·</span>
+            OAuth-protected
+          </div>
+        </div>
+      </section>
+      ${signInCard}
       <div class="card">
         <h2>How it works</h2>
         <ol>
@@ -46,6 +78,18 @@ export function renderLanding(ctx: ViewerCtx, signedInEmail?: string): string {
             Heroku as you.
           </li>
         </ol>
+      </div>
+      <div class="card">
+        <h2>Two endpoints</h2>
+        <p class="section-sub">
+          Both serve the same tools — they differ in when tool schemas hit your context window.
+        </p>
+        <dl class="kv">
+          <dt><code>/mcp</code></dt>
+          <dd>Full tool catalog at session start. Use when context budget isn't a concern.</dd>
+          <dt><code>/mcp-codemode</code></dt>
+          <dd>On-demand tool discovery via meta-tools — dramatically smaller context cost.</dd>
+        </dl>
       </div>
     `,
   );
