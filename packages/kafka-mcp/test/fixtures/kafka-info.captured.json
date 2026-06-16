@@ -1,0 +1,76 @@
+{
+  "addon_id": "a47a6373-58fd-46bd-886d-9f505a8812ad",
+  "name": "kafka-clean-72346",
+  "attachment_name": "KAFKA_URL",
+  "created_at": "2026-06-10 13:57:21 +0000",
+  "state": {
+    "message": "available",
+    "waiting?": false,
+    "healthy?": true,
+    "status": "green",
+    "degraded_topics": [],
+    "degraded_brokers": []
+  },
+  "limits": {
+    "minimum_replication": 3,
+    "maximum_replication": 3,
+    "minimum_retention_ms": 21600000,
+    "maximum_retention_ms": 604800000,
+    "default_retention_ms": 86400000,
+    "max_partition_replica_count": 240,
+    "max_number_of_total_partitions": 240,
+    "max_number_of_partitions_per_topic": 256,
+    "max_number_of_topics": 40,
+    "data_size": {
+      "subcritical_percentage": 150,
+      "critical_percentage": 190,
+      "supercritical_percentage": 250,
+      "limit_bytes": 4294967296
+    },
+    "produce_quota_bytes_per_second": 65536,
+    "consume_quota_bytes_per_second": 262144,
+    "max_topics": 40
+  },
+  "defaults": {
+    "partition_count": 8,
+    "retention_time_ms": 86400000
+  },
+  "robot": {
+    "is_robot": false,
+    "robot_ttl": null
+  },
+  "topics": ["mcp-test-topic"],
+  "admin_topic_names": ["__consumer_offsets", "__transaction_state"],
+  "shared_cluster": true,
+  "topic_prefix": "pearl-60818.",
+  "formation": {
+    "id": "668c48fd-8985-40e0-b357-0a7a53aadf11",
+    "kafkas": [
+      "462d4cba-bbd3-40f8-a464-f7831227948a",
+      "63b5c389-9bc3-4451-972c-79bb57d0cf83",
+      "d068f687-ba7f-4aa3-bbfe-45caa58e3178",
+      "8ed66b64-1a6c-41e8-8bc4-b7067ca8b6fa",
+      "0fd9d28b-16f7-4e10-ac5c-d4e51c5d62c8",
+      "d33cb1d1-e2bb-4a4e-b51f-3b691c1ee674",
+      "c14fe92a-47bd-4545-803e-e23ca6b1908a",
+      "29f839aa-b06f-4ec0-97f2-ddd1f4696d12"
+    ],
+    "zookeepers": [
+      "33a79667-0df1-4874-b1a3-5aa298028426",
+      "283d8195-69a4-4e01-a0c6-de30e71e7d68",
+      "f1d2a6b9-d9b8-4c99-b6df-a5e790371f60",
+      "ee4bcb30-f23a-4dba-a3b6-c75f87f03a9d",
+      "c1b33631-e895-4708-a05c-e98cf7cda50f"
+    ]
+  },
+  "capabilities": {
+    "supports_mixed_cleanup_policy": true
+  },
+  "metaas_source": "dod-kafka-tenant://a70ffa50-2a80-4306-bced-40db0de2ff4f",
+  "messages_in_per_sec": 0,
+  "bytes_in_per_sec": 0,
+  "bytes_out_per_sec": 0,
+  "version": ["3.7.1"],
+  "partition_replica_count": 24,
+  "data_size": 0
+}

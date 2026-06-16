@@ -1,0 +1,70 @@
+{
+  "name": "@heroku-mcp/platform",
+  "version": "1.0.0",
+  "description": "MCP tools for the Heroku Platform API: apps, dynos, builds, releases, config vars, addons, teams, spaces, webhooks, and more.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "heroku",
+    "heroku-api",
+    "platform-api"
+  ],
+  "homepage": "https://github.com/StratisLLC/heroku-platform-mcp-server#readme",
+  "bugs": {
+    "url": "https://github.com/StratisLLC/heroku-platform-mcp-server/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/StratisLLC/heroku-platform-mcp-server.git",
+    "directory": "packages/platform-mcp"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "David Baliles",
+    "email": "david@baliles.com"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "herokumcp-platform": "./dist/index-stdio.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "VITEST_INTEGRATION=1 vitest run test/integration",
+    "lint": "eslint src test",
+    "format": "prettier --write src test",
+    "format:check": "prettier --check src test"
+  },
+  "dependencies": {
+    "@heroku-mcp/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.8"
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "name": "@heroku-mcp/http-server",
+  "version": "1.1.0",
+  "description": "Self-hosted HTTP server exposing Heroku MCP tools to LLM clients via OAuth-protected MCP endpoint.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "heroku",
+    "mcp-server",
+    "oauth",
+    "self-hosted"
+  ],
+  "homepage": "https://github.com/StratisLLC/heroku-platform-mcp-server#readme",
+  "bugs": {
+    "url": "https://github.com/StratisLLC/heroku-platform-mcp-server/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/StratisLLC/heroku-platform-mcp-server.git",
+    "directory": "packages/http-server"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "David Baliles",
+    "email": "david@baliles.com"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "herokumcp-platform-server": "./dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "migrations",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "VITEST_INTEGRATION=1 vitest run test/integration",
+    "lint": "eslint src test",
+    "format": "prettier --write src test",
+    "format:check": "prettier --check src test"
+  },
+  "dependencies": {
+    "@heroku-mcp/core": "workspace:*",
+    "@heroku-mcp/kafka": "workspace:*",
+    "@heroku-mcp/key-value": "workspace:*",
+    "@heroku-mcp/platform": "workspace:*",
+    "@heroku-mcp/postgres": "workspace:*",
+    "@hono/node-server": "^1.13.7",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "hono": "^4.6.14",
+    "pg": "^8.13.1",
+    "ws": "^8.18.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "@types/ws": "^8.5.13",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.8"
+  }
+}

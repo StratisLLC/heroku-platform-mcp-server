@@ -1,0 +1,7 @@
+{
+  "_source": "MOCKED-but-realistic. POST /data/maintenances/v1/{addon_id}/window (Bearer, host api.data.heroku.com) with body {day_of_week, time_of_day}. Derived from heroku/cli src/commands/data/maintenances/window/update.ts + the Window type in src/lib/data/types.ts. Tier-2 tool: maintenance is unavailable on the essential-0 test DB (GET .../maintenance returns 422), so no live success captured.",
+  "previous_window": "Sundays 06:00 UTC",
+  "previously_scheduled_at": null,
+  "scheduled_at": null,
+  "window": "Sundays 14:30 UTC"
+}

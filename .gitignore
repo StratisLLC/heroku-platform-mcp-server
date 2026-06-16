@@ -1,0 +1,20 @@
+node_modules
+dist
+coverage
+.pnpm-store
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+.vitest-temp
+.turbo
+.eslintcache
+
+# Local handoff docs — scratch artifacts
+CLAUDE-CODE-HANDOFF-*.md
+TOKEN-OPTIMIZATION.md
+
+# Local notes — never commit
+notes/

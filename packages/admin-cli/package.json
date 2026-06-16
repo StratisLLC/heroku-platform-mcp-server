@@ -1,0 +1,65 @@
+{
+  "name": "@heroku-mcp/admin-cli",
+  "version": "1.0.0",
+  "description": "Administrative CLI for managing a deployed @heroku-mcp/http-server: user allowlists, OAuth client management, audit log inspection.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "heroku",
+    "cli",
+    "admin"
+  ],
+  "homepage": "https://github.com/StratisLLC/heroku-platform-mcp-server#readme",
+  "bugs": {
+    "url": "https://github.com/StratisLLC/heroku-platform-mcp-server/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/StratisLLC/heroku-platform-mcp-server.git",
+    "directory": "packages/admin-cli"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "David Baliles",
+    "email": "david@baliles.com"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "herokumcp-admin": "./dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "echo no-integration-tests-for-admin-cli && exit 0",
+    "lint": "eslint src test",
+    "format": "prettier --write src test",
+    "format:check": "prettier --check src test"
+  },
+  "dependencies": {
+    "@heroku-mcp/core": "workspace:*",
+    "@heroku-mcp/http-server": "workspace:*",
+    "commander": "^12.1.0",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.8"
+  }
+}

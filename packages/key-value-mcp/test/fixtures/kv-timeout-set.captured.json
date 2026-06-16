@@ -1,0 +1,32 @@
+{
+  "maxmemory_policy": {
+    "value": "noeviction",
+    "desc": "Sets the desired key eviction behavior when a Redis instance reaches max memory.",
+    "default": "noeviction",
+    "values": {
+      "noeviction": "return errors when memory limit is reached",
+      "allkeys-lru": "evict keys trying to remove the less recently used keys first",
+      "volatile-lru": "evict keys trying to remove the less recently used keys first, but only those that have an expiry set",
+      "allkeys-random": "evict random keys",
+      "volatile-random": "evict random keys in order to make space for the new data added, but only evict keys with an expire set",
+      "volatile-ttl": "evict only keys with an expire set, and try to evict keys with a shorter time to live (TTL) first",
+      "allkeys-lfu": "evict any key using approximated LFU",
+      "volatile-lfu": "evict using approximated LFU among the keys with an expire set"
+    }
+  },
+  "notify_keyspace_events": {
+    "value": "",
+    "desc": "Enables keyspace notifications.",
+    "default": ""
+  },
+  "timeout": {
+    "value": 60,
+    "desc": "Represent how long a client can idle before being disconnected.",
+    "default": 300
+  },
+  "standby_segv_workaround": {
+    "value": false,
+    "desc": "There's a known segv bug with redis: https://trello.com/c/zW04yt19/551-known-redis-segfaults. We can improve the ability of standbys to handle that by setting particular redis settings.",
+    "default": false
+  }
+}

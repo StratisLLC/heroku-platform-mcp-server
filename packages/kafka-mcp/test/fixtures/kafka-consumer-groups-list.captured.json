@@ -1,0 +1,8 @@
+{
+  "attachment_name": "KAFKA_URL",
+  "consumer_groups": [
+    {
+      "name": "mcp-test-group"
+    }
+  ]
+}

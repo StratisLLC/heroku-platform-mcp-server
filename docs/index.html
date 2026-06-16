@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Heroku Platform MCP Server — Tagged under Headless 360</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Salesforce Lightning Design System palette */
+    --sfdc-brand: #0176D3;          /* primary brand blue */
+    --sfdc-brand-dark: #014486;     /* hover/active */
+    --sfdc-brand-darker: #032D60;   /* deep navy */
+    --sfdc-accent: #0D9DDA;         /* lighter brand accent */
+    --sfdc-bg: #F3F3F3;             /* page bg */
+    --sfdc-surface: #FFFFFF;        /* card bg */
+    --sfdc-border: #DDDBDA;         /* default border */
+    --sfdc-border-strong: #C9C7C5;
+    --sfdc-text: #181818;           /* primary text */
+    --sfdc-text-secondary: #514F4D; /* secondary text */
+    --sfdc-text-tertiary: #706E6B;  /* tertiary text */
+    --sfdc-success: #2E844A;
+    --sfdc-success-bg: #CDEFC4;
+    --sfdc-info-bg: #EAF5FE;
+    --sfdc-code-bg: #F3F2F2;
+  }
+
+  * {
+    box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--sfdc-bg);
+    color: var(--sfdc-text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+
+  code, pre {
+    font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+  }
+
+  /* ===== Hero ===== */
+  .hero {
+    background: linear-gradient(135deg, #032D60 0%, #014486 50%, #0176D3 100%);
+    color: #fff;
+    padding: 56px 0 64px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(13, 157, 218, 0.25) 0%, transparent 35%),
+      radial-gradient(circle at 80% 90%, rgba(1, 118, 211, 0.30) 0%, transparent 40%);
+    pointer-events: none;
+  }
+  .hero-inner {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 32px;
+    position: relative;
+  }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #B5DAFE;
+    margin-bottom: 16px;
+  }
+  .eyebrow-dot {
+    width: 6px;
+    height: 6px;
+    background: #0D9DDA;
+    border-radius: 50%;
+  }
+  h1.hero-title {
+    font-size: 44px;
+    font-weight: 700;
+    line-height: 1.1;
+    margin: 0 0 16px;
+    letter-spacing: -0.02em;
+  }
+  .hero-sub {
+    font-size: 18px;
+    color: #C9DDFB;
+    max-width: 720px;
+    margin: 0 0 24px;
+    line-height: 1.5;
+  }
+  .platform-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 24px;
+    padding: 6px 14px;
+    font-size: 12px;
+    color: #fff;
+    font-weight: 500;
+  }
+  .platform-tag strong {
+    font-weight: 600;
+  }
+  .platform-tag .sep {
+    color: rgba(255, 255, 255, 0.35);
+    margin: 0 4px;
+  }
+
+  /* ===== Layout ===== */
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 32px;
+  }
+  main {
+    padding: 56px 0;
+  }
+  section {
+    margin-bottom: 56px;
+  }
+  section:last-child {
+    margin-bottom: 0;
+  }
+
+  h2 {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--sfdc-text);
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+  h2 + .section-sub {
+    color: var(--sfdc-text-secondary);
+    font-size: 15px;
+    margin: 0 0 24px;
+  }
+  h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--sfdc-text);
+    margin: 0 0 12px;
+  }
+
+  /* ===== Get-started two-option cards ===== */
+  .options-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 720px) {
+    .options-grid { grid-template-columns: 1fr; }
+  }
+  .option-card {
+    background: var(--sfdc-surface);
+    border: 1px solid var(--sfdc-border);
+    border-radius: 8px;
+    padding: 24px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .option-card:hover {
+    border-color: var(--sfdc-brand);
+    box-shadow: 0 2px 12px rgba(1, 118, 211, 0.08);
+  }
+  .option-card .opt-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--sfdc-info-bg);
+    color: var(--sfdc-brand);
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 12px;
+  }
+  .option-card h3 {
+    margin-bottom: 6px;
+  }
+  .option-card p {
+    color: var(--sfdc-text-secondary);
+    font-size: 14px;
+    margin: 0 0 16px;
+    line-height: 1.5;
+  }
+  .option-card .opt-action {
+    font-size: 14px;
+    color: var(--sfdc-brand);
+    font-weight: 500;
+    text-decoration: none;
+  }
+  .option-card .opt-action:hover {
+    text-decoration: underline;
+  }
+  .deploy-btn-wrap {
+    margin-top: 8px;
+  }
+  .deploy-btn-wrap img {
+    height: 34px;
+    vertical-align: middle;
+  }
+
+  /* ===== Tools-categories grid ===== */
+  .categories-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  @media (max-width: 720px) {
+    .categories-grid { grid-template-columns: 1fr; }
+  }
+  .cat-card {
+    background: var(--sfdc-surface);
+    border: 1px solid var(--sfdc-border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+  .cat-card .cat-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--sfdc-brand);
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .cat-card .cat-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--sfdc-text);
+    margin: 0 0 6px;
+  }
+  .cat-card .cat-desc {
+    font-size: 13px;
+    color: var(--sfdc-text-secondary);
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  /* ===== Endpoint comparison ===== */
+  .endpoints {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 720px) {
+    .endpoints { grid-template-columns: 1fr; }
+  }
+  .endpoint-card {
+    background: var(--sfdc-surface);
+    border: 1px solid var(--sfdc-border);
+    border-radius: 8px;
+    padding: 24px;
+    position: relative;
+  }
+  .endpoint-card.recommended {
+    border: 2px solid var(--sfdc-brand);
+  }
+  .endpoint-card .badge {
+    position: absolute;
+    top: -10px;
+    left: 24px;
+    background: var(--sfdc-brand);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 4px 10px;
+    border-radius: 3px;
+  }
+  .endpoint-card .ep-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--sfdc-brand-darker);
+    margin: 0 0 4px;
+  }
+  .endpoint-card .ep-tag {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--sfdc-text-tertiary);
+    margin-bottom: 12px;
+  }
+  .endpoint-card .ep-desc {
+    font-size: 14px;
+    color: var(--sfdc-text-secondary);
+    line-height: 1.5;
+    margin: 0 0 16px;
+  }
+  .stat-row {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    padding: 8px 0;
+    border-top: 1px solid var(--sfdc-border);
+  }
+  .stat-row:first-of-type {
+    border-top: none;
+    padding-top: 0;
+  }
+  .stat-label {
+    font-size: 12px;
+    color: var(--sfdc-text-tertiary);
+    flex: 1;
+  }
+  .stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--sfdc-text);
+  }
+  .stat-savings {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--sfdc-success);
+  }
+
+  /* ===== Connect steps ===== */
+  .connect-card {
+    background: var(--sfdc-surface);
+    border: 1px solid var(--sfdc-border);
+    border-radius: 8px;
+    padding: 28px;
+  }
+  .connect-card h3 {
+    margin-bottom: 16px;
+  }
+  ol.steps {
+    list-style: none;
+    counter-reset: stepcount;
+    padding: 0;
+    margin: 0;
+  }
+  ol.steps > li {
+    counter-increment: stepcount;
+    position: relative;
+    padding-left: 40px;
+    padding-bottom: 16px;
+    color: var(--sfdc-text-secondary);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  ol.steps > li::before {
+    content: counter(stepcount);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 26px;
+    height: 26px;
+    background: var(--sfdc-info-bg);
+    color: var(--sfdc-brand);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 12px;
+  }
+  ol.steps > li:last-child {
+    padding-bottom: 0;
+  }
+  ol.steps > li strong {
+    color: var(--sfdc-text);
+    font-weight: 600;
+  }
+  ol.steps code {
+    background: var(--sfdc-code-bg);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--sfdc-brand-darker);
+  }
+
+  /* ===== Inline code & links ===== */
+  p {
+    color: var(--sfdc-text-secondary);
+    line-height: 1.6;
+  }
+  p code {
+    background: var(--sfdc-code-bg);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--sfdc-brand-darker);
+  }
+  a {
+    color: var(--sfdc-brand);
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+
+  /* ===== Links section ===== */
+  .links-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  @media (max-width: 720px) {
+    .links-grid { grid-template-columns: 1fr; }
+  }
+  .link-card {
+    background: var(--sfdc-surface);
+    border: 1px solid var(--sfdc-border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .link-card:hover {
+    border-color: var(--sfdc-brand);
+    background: #FAFCFE;
+    text-decoration: none;
+  }
+  .link-card .ln-label {
+    font-size: 12px;
+    color: var(--sfdc-text-tertiary);
+    font-weight: 500;
+    margin-bottom: 2px;
+  }
+  .link-card .ln-text {
+    font-size: 14px;
+    color: var(--sfdc-text);
+    font-weight: 500;
+  }
+  .link-card .arrow {
+    color: var(--sfdc-brand);
+    font-size: 16px;
+  }
+
+  /* ===== Footer ===== */
+  footer {
+    background: #FAFAF9;
+    border-top: 1px solid var(--sfdc-border);
+    padding: 32px 0;
+    margin-top: 56px;
+  }
+  .footer-inner {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .footer-credit {
+    font-size: 12px;
+    color: var(--sfdc-text-tertiary);
+    line-height: 1.6;
+  }
+  .footer-credit strong {
+    color: var(--sfdc-text-secondary);
+  }
+  .footer-attribution {
+    font-size: 11px;
+    color: var(--sfdc-text-tertiary);
+    max-width: 460px;
+    line-height: 1.5;
+  }
+
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">
+      <span class="eyebrow-dot"></span>
+      Tagged under Headless 360
+    </div>
+    <h1 class="hero-title">Heroku Platform MCP Server</h1>
+    <p class="hero-sub">
+      An MCP server that exposes the Heroku platform as agent-callable tools — apps, dynos, Postgres, Key-Value, Kafka. Self-hosted, OAuth-protected, open source.
+    </p>
+    <div class="platform-tag">
+      <strong>Powered by Salesforce Platform</strong>
+      <span class="sep">·</span>
+      Runs on Heroku
+      <span class="sep">·</span>
+      Speaks MCP
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="container">
+
+    <section>
+      <h2>Get started</h2>
+      <p class="section-sub">Two paths. Same MCP server. Pick the one that fits your situation.</p>
+      <div class="options-grid">
+        <div class="option-card">
+          <span class="opt-num">1</span>
+          <h3>Use a shared instance</h3>
+          <p>Skip the setup. Point your MCP client at an existing deployed server and authenticate with your own Heroku account. Tools act on your behalf using your own permissions — you never share credentials with the host.</p>
+          <a href="#connect" class="opt-action">Jump to Connect from Claude →</a>
+        </div>
+        <div class="option-card">
+          <span class="opt-num">2</span>
+          <h3>Deploy your own</h3>
+          <p>Run your own private instance on Heroku in about five minutes. Provision an OAuth client first (the deploy form needs it), then click the button.</p>
+          <div class="deploy-btn-wrap">
+            <a href="https://heroku.com/deploy?template=https://github.com/StratisLLC/heroku-platform-mcp/tree/main">
+              <img src="https://www.herokucdn.com/deploy/button.svg" alt="Deploy to Heroku">
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>What it does</h2>
+      <p class="section-sub">276 tools spanning the full Heroku platform surface. Every tool callable by any MCP-aware agent.</p>
+      <div class="categories-grid">
+        <div class="cat-card">
+          <div class="cat-label">Platform</div>
+          <h4 class="cat-title">Heroku Platform API</h4>
+          <p class="cat-desc">Apps, dynos, builds, releases, config vars, addons, teams, spaces, webhooks, OAuth clients.</p>
+        </div>
+        <div class="cat-card">
+          <div class="cat-label">Data</div>
+          <h4 class="cat-title">Heroku Postgres</h4>
+          <p class="cat-desc">Database info, credentials, backups, followers, maintenance. Plus write operations with confirm guards.</p>
+        </div>
+        <div class="cat-card">
+          <div class="cat-label">Data</div>
+          <h4 class="cat-title">Key-Value Store (Redis)</h4>
+          <p class="cat-desc">Admin, credentials, config (maxmemory / timeout / keyspace notifications), stats.</p>
+        </div>
+        <div class="cat-card">
+          <div class="cat-label">Streaming</div>
+          <h4 class="cat-title">Apache Kafka on Heroku</h4>
+          <p class="cat-desc">Cluster info, topics, consumer groups.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Two endpoints, pick your context budget</h2>
+      <p class="section-sub">Both serve the same tools. Difference is <em>when</em> tool schemas hit your context window.</p>
+      <div class="endpoints">
+        <div class="endpoint-card">
+          <p class="ep-tag">Standard</p>
+          <p class="ep-name">/mcp</p>
+          <p class="ep-desc">Full catalog of 276 tool schemas at session start. Use when you don't care about context tokens or when your client doesn't support on-demand discovery.</p>
+          <div class="stat-row"><span class="stat-label">Initial schema transmission</span><span class="stat-value">~60,812 tokens</span></div>
+          <div class="stat-row"><span class="stat-label">Per session</span><span class="stat-value">Front-loaded</span></div>
+        </div>
+        <div class="endpoint-card recommended">
+          <span class="badge">Recommended</span>
+          <p class="ep-tag">Token-optimized</p>
+          <p class="ep-name">/mcp-codemode</p>
+          <p class="ep-desc">Three discovery meta-tools (<code>search</code>, <code>execute</code>, <code>auth_status</code>). Agent discovers tools on-demand. Functionally identical, dramatically smaller context cost.</p>
+          <div class="stat-row"><span class="stat-label">Initial schema transmission</span><span class="stat-value">~585 tokens</span></div>
+          <div class="stat-row"><span class="stat-label">7-query discovery</span><span class="stat-value">~7,908 tokens</span></div>
+          <div class="stat-row"><span class="stat-label">End-to-end reduction</span><span class="stat-savings">87.0%</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="connect">
+      <h2>Connect from Claude Desktop</h2>
+      <p class="section-sub">Five steps. Works in claude.ai web the same way.</p>
+      <div class="connect-card">
+        <ol class="steps">
+          <li>Open <strong>Settings → Connectors → Add custom connector</strong></li>
+          <li>Paste either endpoint URL — your choice between <code>/mcp</code> and <code>/mcp-codemode</code></li>
+          <li>Leave OAuth Client ID and Secret blank — the server handles registration automatically via Dynamic Client Registration</li>
+          <li>Click <strong>Add</strong>. A browser window opens for Heroku authentication. Sign in and click <strong>Authorize</strong></li>
+          <li>Connector shows as Connected. You now have access to your Heroku resources through Claude</li>
+        </ol>
+      </div>
+    </section>
+
+    <section>
+      <h2>Switching between endpoints</h2>
+      <p>You can change endpoints at any time. Remove the current connector, add a new connector pointing at the other URL, complete a fresh OAuth flow. Old connections at <code>/mcp</code> and new connections at <code>/mcp-codemode</code> coexist — you're not locked in.</p>
+    </section>
+
+    <section>
+      <h2>Other MCP clients</h2>
+      <p>Most clients accept a connector URL plus OAuth configuration. The server speaks standard MCP over HTTP with Dynamic Client Registration, so any spec-compliant client works. Configuration syntax varies by client; the URL is the same. If your client requires explicit OAuth client_id/secret (no DCR support), see the OAuth setup guide linked below.</p>
+    </section>
+
+    <section>
+      <h2>Resources</h2>
+      <div class="links-grid">
+        <a href="https://github.com/StratisLLC/heroku-platform-mcp-server" class="link-card">
+          <div>
+            <div class="ln-label">GitHub</div>
+            <div class="ln-text">Source repository</div>
+          </div>
+          <span class="arrow">→</span>
+        </a>
+        <a href="https://www.npmjs.com/org/heroku-mcp" class="link-card">
+          <div>
+            <div class="ln-label">npm</div>
+            <div class="ln-text">All published packages</div>
+          </div>
+          <span class="arrow">→</span>
+        </a>
+        <a href="https://github.com/StratisLLC/heroku-platform-mcp-server/blob/main/docs/CODE-MODE.md" class="link-card">
+          <div>
+            <div class="ln-label">Documentation</div>
+            <div class="ln-text">Code Mode details</div>
+          </div>
+          <span class="arrow">→</span>
+        </a>
+        <a href="https://github.com/StratisLLC/heroku-platform-mcp-server/blob/main/docs/OAUTH-SETUP.md" class="link-card">
+          <div>
+            <div class="ln-label">Documentation</div>
+            <div class="ln-text">OAuth client setup</div>
+          </div>
+          <span class="arrow">→</span>
+        </a>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-credit">
+      Published by <strong>Stratis, LLC</strong> · Apache-2.0 License
+    </div>
+    <div class="footer-attribution">
+      Salesforce and the Salesforce logo are trademarks of Salesforce, Inc. Heroku and the Heroku logo are trademarks of Salesforce, Inc. This is an independent open-source project and is not affiliated with, endorsed by, or sponsored by Salesforce.
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

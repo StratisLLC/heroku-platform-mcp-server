@@ -1,0 +1,39 @@
+name: Publish
+# Tag-triggered npm publish for the @heroku-mcp/* packages.
+# Fires only on version tags (v*.*.*). The build + test steps gate the
+# irreversible publish step so a broken commit can never reach npm.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+permissions:
+  contents: read
+  id-token: write # required for npm provenance attestation
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    name: build / test / publish to npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm -r build
+      - name: Test
+        run: pnpm -r test
+      - name: Publish to npm
+        run: pnpm -r publish --access public --no-git-checks --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: 'true'

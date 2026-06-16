@@ -1,0 +1,37 @@
+[
+  {
+    "actions": [],
+    "app": {
+      "id": "df5a1209-7357-4369-9706-e9ca9086bc2e",
+      "name": "dm-kvtest"
+    },
+    "config_vars": [
+      "REDIS_URL"
+    ],
+    "created_at": "2026-06-09T19:31:45Z",
+    "id": "03a8ea32-bbc7-49ac-afac-e20dd35895bb",
+    "name": "redis-shallow-89243",
+    "addon_service": {
+      "id": "5bbf672c-07f6-49c2-9c16-f1dcb96784db",
+      "name": "heroku-redis"
+    },
+    "plan": {
+      "id": "26e7bd37-e7a2-4cab-8d67-767af864d1a1",
+      "name": "heroku-redis:mini"
+    },
+    "billing_entity": {
+      "id": "df5a1209-7357-4369-9706-e9ca9086bc2e",
+      "name": "dm-kvtest",
+      "type": "app"
+    },
+    "provider_id": "03a8ea32-bbc7-49ac-afac-e20dd35895bb",
+    "state": "provisioned",
+    "updated_at": "2026-06-09T19:34:10Z",
+    "web_url": "https://addons-sso.heroku.com/apps/df5a1209-7357-4369-9706-e9ca9086bc2e/addons/03a8ea32-bbc7-49ac-afac-e20dd35895bb",
+    "billed_price": {
+      "cents": 300,
+      "contract": false,
+      "unit": "month"
+    }
+  }
+]
