@@ -273,6 +273,22 @@ export interface MapResponseInput {
   invalidParamsFields?: readonly string[];
 }
 
+/** Remediation appended to a 403 on a usage/billing endpoint. Scope alone is
+ *  not sufficient — the Heroku user must also be a billing/enterprise admin. */
+const USAGE_BILLING_403_REMEDIATION =
+  'Usage and billing data require enterprise billing-admin permission on your Heroku account in ' +
+  'addition to the `global` OAuth scope. A `global` token alone is not sufficient — if your ' +
+  'Heroku user is not a billing/enterprise admin, this call will be forbidden.';
+
+/** True when the request URL targets a usage or billing (invoices) endpoint.
+ *  Used to attach a clearer 403 message for those tools only. Matches the
+ *  Heroku paths `/teams|enterprise-accounts/{id}/usage/*` and `/account|teams
+ *  /{id}/invoices`. */
+function isUsageOrBillingUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  return lower.includes('usage') || lower.includes('invoices');
+}
+
 /**
  * Classify an HTTP error response into the appropriate {@link HerokuError}
  * subclass. The status is the primary signal; the body's `id` field
@@ -297,7 +313,10 @@ export function mapHttpResponseToError(input: MapResponseInput): HerokuError {
     case 402:
       return new DelinquentError(message, baseOpts);
     case 403:
-      return new ForbiddenError(message, baseOpts);
+      return new ForbiddenError(
+        isUsageOrBillingUrl(input.url) ? `${message} ${USAGE_BILLING_403_REMEDIATION}` : message,
+        baseOpts,
+      );
     case 404:
       return new NotFoundError(message, baseOpts);
     case 409:

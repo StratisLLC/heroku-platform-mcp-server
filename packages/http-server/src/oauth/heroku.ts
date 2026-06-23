@@ -51,12 +51,27 @@ export interface BuildAuthorizeUrlOptions {
   codeChallenge: string;
 }
 
+/**
+ * Normalise an OAuth scope string before it goes on the authorize URL.
+ *
+ * Heroku rejects `global` combined with any other scope ("permissions of
+ * global are a superset of identity"), so if the requested scopes include
+ * `global` we collapse the whole value to exactly `global`. This makes both a
+ * correct `global` and a mistakenly-typed `identity,global` work. When `global`
+ * is absent the value is returned unchanged. Pure string transform — no network.
+ */
+export function normalizeScope(scope: string): string {
+  const tokens = scope.split(/[\s,]+/).map((t) => t.trim()).filter(Boolean);
+  if (tokens.includes('global')) return 'global';
+  return scope;
+}
+
 /** Build the URL we redirect the user's browser to on /sign-in. */
 export function buildAuthorizeUrl(cfg: HerokuOAuthConfig, opts: BuildAuthorizeUrlOptions): string {
   const u = new URL(cfg.authorizeUrl);
   u.searchParams.set('client_id', cfg.clientId);
   u.searchParams.set('response_type', 'code');
-  u.searchParams.set('scope', cfg.scope);
+  u.searchParams.set('scope', normalizeScope(cfg.scope));
   u.searchParams.set('state', opts.state);
   u.searchParams.set('code_challenge', opts.codeChallenge);
   u.searchParams.set('code_challenge_method', 'S256');

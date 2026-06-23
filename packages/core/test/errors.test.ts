@@ -185,6 +185,42 @@ describe('mapHttpResponseToError', () => {
     expect(e.herokuId).toBe('suspended');
   });
 
+  it('appends usage/billing remediation to a 403 on a usage endpoint', () => {
+    const e = mapHttpResponseToError({
+      url: 'https://api.heroku.com/teams/acme/usage/daily',
+      status: 403,
+      body: { id: 'forbidden', message: 'Forbidden.' },
+      requestId: 'req-9',
+    });
+    expect(e).toBeInstanceOf(ForbiddenError);
+    expect(e.kind).toBe('forbidden');
+    expect(e.status).toBe(403);
+    expect(e.herokuId).toBe('forbidden');
+    expect(e.requestId).toBe('req-9');
+    expect(e.message).toContain('Forbidden.');
+    expect(e.message).toContain('billing-admin permission');
+    expect(e.message).toContain('`global` token alone is not sufficient');
+  });
+
+  it('appends the remediation on an invoices endpoint too', () => {
+    const e = mapHttpResponseToError({
+      url: 'https://api.heroku.com/account/invoices',
+      status: 403,
+      body: {},
+    });
+    expect(e.message).toContain('billing-admin permission');
+  });
+
+  it('does not alter a 403 on a non-usage endpoint', () => {
+    const e = mapHttpResponseToError({
+      ...base,
+      status: 403,
+      body: { message: 'Forbidden.' },
+    });
+    expect(e.message).toBe('Forbidden.');
+    expect(e.message).not.toContain('billing-admin');
+  });
+
   it('maps 404, 409, 422, 400 to their respective classes', () => {
     expect(mapHttpResponseToError({ ...base, status: 404, body: {} })).toBeInstanceOf(
       NotFoundError,

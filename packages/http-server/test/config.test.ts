@@ -17,7 +17,7 @@ describe('loadConfig', () => {
   it('parses a minimal valid env', () => {
     const cfg = loadConfig(baseEnv());
     expect(cfg.port).toBe(3000);
-    expect(cfg.oauth.scope).toBe('write-protected');
+    expect(cfg.oauth.scope).toBe('identity,write-protected');
     expect(cfg.adminContact).toBe('admin@example.com');
     expect(cfg.allowedEmails).toBeNull();
     expect(cfg.allowedTeams).toBeNull();

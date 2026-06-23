@@ -39,7 +39,12 @@ const Env = z.object({
   HEROKUMCP_OAUTH_CLIENT_ID: z.string().min(1, 'HEROKUMCP_OAUTH_CLIENT_ID is required'),
   HEROKUMCP_OAUTH_CLIENT_SECRET: z.string().min(1, 'HEROKUMCP_OAUTH_CLIENT_SECRET is required'),
   HEROKUMCP_ADMIN_CONTACT: z.string().min(1, 'HEROKUMCP_ADMIN_CONTACT is required'),
-  HEROKUMCP_OAUTH_SCOPE: z.string().default('write-protected'),
+  // Must include `identity` — `GET /account` (the required `account.self`
+  // probe and `resolveUserAccessToken`'s identity fetch) needs it. A bare
+  // `write-protected` default silently breaks first sign-in, so default to the
+  // working least-privilege value. (Use `global` for usage/billing access; see
+  // the scope normalisation in oauth/heroku.ts.)
+  HEROKUMCP_OAUTH_SCOPE: z.string().default('identity,write-protected'),
   // Optional: an explicit operator override. When unset, the public URL is
   // resolved lazily from the first inbound request's Host header (see
   // PublicUrlResolver), so the server boots fine without it. When present it

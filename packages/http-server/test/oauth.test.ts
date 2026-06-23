@@ -6,6 +6,7 @@ import {
   fetchTeams,
   HerokuOAuthError,
   HerokuTokenResponse,
+  normalizeScope,
   type HerokuOAuthConfig,
 } from '../src/oauth/heroku.js';
 
@@ -35,6 +36,29 @@ describe('buildAuthorizeUrl', () => {
     expect(u.searchParams.get('code_challenge')).toBe('cc');
     expect(u.searchParams.get('code_challenge_method')).toBe('S256');
     expect(u.searchParams.get('redirect_uri')).toBe('https://app/oauth/callback');
+  });
+
+  it('normalises a global scope on the authorize URL', () => {
+    const url = buildAuthorizeUrl({ ...cfg, scope: 'identity,global' }, { state: 'st', codeChallenge: 'cc' });
+    expect(new URL(url).searchParams.get('scope')).toBe('global');
+  });
+});
+
+describe('normalizeScope', () => {
+  it('leaves a bare global scope as global', () => {
+    expect(normalizeScope('global')).toBe('global');
+  });
+
+  it('collapses identity,global to global (Heroku rejects the combination)', () => {
+    expect(normalizeScope('identity,global')).toBe('global');
+    expect(normalizeScope('identity global')).toBe('global');
+    expect(normalizeScope(' global , identity ')).toBe('global');
+  });
+
+  it('leaves a non-global scope unchanged', () => {
+    expect(normalizeScope('identity,write-protected')).toBe('identity,write-protected');
+    expect(normalizeScope('write-protected')).toBe('write-protected');
+    expect(normalizeScope('read')).toBe('read');
   });
 });
 
