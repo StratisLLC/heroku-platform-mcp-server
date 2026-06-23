@@ -85,7 +85,7 @@ describe('enterprise-tier reads', () => {
     expect(env.meta?.pagination).toEqual({ hasMore: true, cursor: 'id ea-1; max=10' });
   });
 
-  it('enterprise_account_monthly_usage passes start + end query params', async () => {
+  it('enterprise_account_monthly_usage passes year-month start + end query params', async () => {
     const { client, calls } = await spinUpServer({
       capabilities: enterpriseOnly,
       responses: [
@@ -98,10 +98,49 @@ describe('enterprise-tier reads', () => {
     });
     await client.callTool({
       name: 'enterprise_account_monthly_usage',
+      arguments: { enterprise: 'acme-ent', start: '2026-05', end: '2026-06' },
+    });
+    expect(calls[0]?.url).toContain('start=2026-05');
+    expect(calls[0]?.url).toContain('end=2026-06');
+  });
+
+  it('enterprise_account_monthly_usage rejects a full date before any HTTP call', async () => {
+    const { client, calls } = await spinUpServer({ capabilities: enterpriseOnly, responses: [] });
+    const result = (await client.callTool({
+      name: 'enterprise_account_monthly_usage',
+      arguments: { enterprise: 'acme-ent', start: '2026-05-01', end: '2026-06-01' },
+    })) as { isError?: boolean };
+    expect(result.isError).toBe(true);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('enterprise_account_daily_usage passes full-date start + end query params', async () => {
+    const { client, calls } = await spinUpServer({
+      capabilities: enterpriseOnly,
+      responses: [
+        {
+          match: (url) =>
+            url.startsWith('https://api.heroku.com/enterprise-accounts/acme-ent/usage/daily'),
+          body: [],
+        },
+      ],
+    });
+    await client.callTool({
+      name: 'enterprise_account_daily_usage',
       arguments: { enterprise: 'acme-ent', start: '2026-05-01', end: '2026-05-31' },
     });
     expect(calls[0]?.url).toContain('start=2026-05-01');
     expect(calls[0]?.url).toContain('end=2026-05-31');
+  });
+
+  it('enterprise_account_daily_usage rejects a year-month value before any HTTP call', async () => {
+    const { client, calls } = await spinUpServer({ capabilities: enterpriseOnly, responses: [] });
+    const result = (await client.callTool({
+      name: 'enterprise_account_daily_usage',
+      arguments: { enterprise: 'acme-ent', start: '2026-05', end: '2026-06' },
+    })) as { isError?: boolean };
+    expect(result.isError).toBe(true);
+    expect(calls).toHaveLength(0);
   });
 
   it('enterprise_account_member_apps_list URL-encodes the user email', async () => {

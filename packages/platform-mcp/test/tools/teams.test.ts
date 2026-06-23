@@ -163,4 +163,43 @@ describe('teams-tier reads', () => {
     expect(calls[0]?.url).toContain('start=2026-05-01');
     expect(calls[0]?.url).toContain('end=2026-05-31');
   });
+
+  it('team_daily_usage rejects a year-month value before any HTTP call', async () => {
+    const { client, calls } = await spinUpServer({ capabilities: teamsOnly, responses: [] });
+    const result = (await client.callTool({
+      name: 'team_daily_usage',
+      arguments: { team: 'acme', start: '2026-05', end: '2026-06' },
+    })) as { isError?: boolean };
+    expect(result.isError).toBe(true);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('team_monthly_usage encodes year-month start/end as query params', async () => {
+    const { client, calls } = await spinUpServer({
+      capabilities: teamsOnly,
+      responses: [
+        {
+          match: (url) => url.startsWith('https://api.heroku.com/teams/acme/usage/monthly?'),
+          body: [],
+        },
+      ],
+    });
+    const result = (await client.callTool({
+      name: 'team_monthly_usage',
+      arguments: { team: 'acme', start: '2026-05', end: '2026-06' },
+    })) as { content: unknown[] };
+    expect(parseEnvelope(result).ok).toBe(true);
+    expect(calls[0]?.url).toContain('start=2026-05');
+    expect(calls[0]?.url).toContain('end=2026-06');
+  });
+
+  it('team_monthly_usage rejects a full date before any HTTP call', async () => {
+    const { client, calls } = await spinUpServer({ capabilities: teamsOnly, responses: [] });
+    const result = (await client.callTool({
+      name: 'team_monthly_usage',
+      arguments: { team: 'acme', start: '2026-05-01', end: '2026-06-01' },
+    })) as { isError?: boolean };
+    expect(result.isError).toBe(true);
+    expect(calls).toHaveLength(0);
+  });
 });

@@ -48,16 +48,32 @@ const teamAndInvoiceInput = {
     .describe('Team invoice number (integer). See `team_invoices_list` to discover values.'),
 };
 
-const teamAndUsageRangeInput = {
+// The monthly usage endpoint requires year-month (YYYY-MM); the daily endpoint
+// requires a full ISO date (YYYY-MM-DD). Heroku returns 422 for the wrong
+// granularity, so we validate per-endpoint client-side and describe each
+// accurately rather than sharing one (misleading) shape.
+const teamMonthlyUsageInput = {
   ...teamInput,
   start: z
     .string()
-    .min(1)
-    .describe('Inclusive start of the usage window, ISO 8601 date (e.g. "2026-05-01").'),
+    .regex(/^\d{4}-\d{2}$/, 'Use year-month, e.g. "2026-05".')
+    .describe('Inclusive start month, year-month YYYY-MM (e.g. "2026-05").'),
   end: z
     .string()
-    .min(1)
-    .describe('Inclusive end of the usage window, ISO 8601 date (e.g. "2026-05-31").'),
+    .regex(/^\d{4}-\d{2}$/, 'Use year-month, e.g. "2026-05".')
+    .describe('Inclusive end month, year-month YYYY-MM (e.g. "2026-06").'),
+};
+
+const teamDailyUsageInput = {
+  ...teamInput,
+  start: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use full date, e.g. "2026-05-01".')
+    .describe('Inclusive start date, ISO date YYYY-MM-DD (e.g. "2026-05-01").'),
+  end: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use full date, e.g. "2026-05-01".')
+    .describe('Inclusive end date, ISO date YYYY-MM-DD (e.g. "2026-05-31").'),
 };
 
 /** Register read-only teams-tier tools onto the server. */
@@ -299,7 +315,7 @@ export function registerTeamsTools(server: McpServer, ctx: ToolContext): void {
       title: 'Team daily usage',
       description:
         'Return a daily usage breakdown for a team across a date window. Wraps GET /teams/{id_or_name}/usage/daily.',
-      inputSchema: teamAndUsageRangeInput,
+      inputSchema: teamDailyUsageInput,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     ({ team, start, end }) =>
@@ -318,7 +334,7 @@ export function registerTeamsTools(server: McpServer, ctx: ToolContext): void {
       title: 'Team monthly usage',
       description:
         'Return a monthly usage breakdown for a team across a date window. Wraps GET /teams/{id_or_name}/usage/monthly.',
-      inputSchema: teamAndUsageRangeInput,
+      inputSchema: teamMonthlyUsageInput,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     ({ team, start, end }) =>
