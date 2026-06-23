@@ -13,6 +13,7 @@
  */
 
 import { PLATFORM_PROBES, type Probe, type ProbeBase, substitutePath } from './probes.js';
+import { scrubString } from './redact.js';
 
 /** Reasons a tier is marked unavailable. */
 export type ProbeReason =
@@ -103,6 +104,59 @@ export interface RunProbesOptions {
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_USER_AGENT = 'herokumcp probe';
 
+/** Values that, used as `HEROKUMCP_PROBE_DEBUG`, leave debug logging off. */
+const PROBE_DEBUG_OFF_VALUES = new Set(['', '0', 'false', 'off', 'no']);
+
+/**
+ * Whether per-probe status logging is enabled via `HEROKUMCP_PROBE_DEBUG`.
+ * Default OFF — the env var must be set to a non-falsey value to turn it on.
+ * Read per call so tests/operators can toggle it without re-importing.
+ */
+function probeDebugEnabled(): boolean {
+  const v = process.env.HEROKUMCP_PROBE_DEBUG;
+  return v !== undefined && !PROBE_DEBUG_OFF_VALUES.has(v.trim().toLowerCase());
+}
+
+/** Status-only diagnostic fields logged for a single probe. */
+interface ProbeDebugFields {
+  status: number;
+  reason: ProbeReason;
+  /** Substituted request path (no token; tokens travel in headers). */
+  path?: string | undefined;
+  /** Parsed Heroku error envelope `id`, when present. */
+  errorId?: string | undefined;
+  /** Parsed Heroku error envelope `message`, when present. */
+  errorMessage?: string | undefined;
+}
+
+/**
+ * Emit one per-probe diagnostic line to stderr when `HEROKUMCP_PROBE_DEBUG`
+ * is enabled (default off). Logs the probe identity, method, path, HTTP
+ * status, classified reason, and the parsed Heroku error id/message ONLY —
+ * never tokens, auth headers, or response bodies. The line is additionally
+ * run through {@link scrubString} as defence in depth.
+ */
+function logProbe(probe: Probe, fields: ProbeDebugFields): void {
+  if (!probeDebugEnabled()) return;
+  const parts = [
+    `probe=${probe.id}`,
+    `tier=${probe.tier}`,
+    `method=${probe.method}`,
+    `path=${fields.path ?? probe.path}`,
+    `status=${fields.status}`,
+    `reason=${fields.reason}`,
+  ];
+  if (fields.errorId !== undefined) parts.push(`error.id=${fields.errorId}`);
+  if (fields.errorMessage !== undefined) parts.push(`error.message=${fields.errorMessage}`);
+  console.error(`[probe-debug] ${scrubString(parts.join(' '))}`);
+}
+
+/** Log the required probe whose failure aborted the run (e.g. 401). */
+function logProbeAbort(probe: Probe, reason: ProbeReason): void {
+  if (!probeDebugEnabled()) return;
+  console.error(`[probe-debug] aborted probe=${probe.id} tier=${probe.tier} reason=${reason}`);
+}
+
 /**
  * Run the probe matrix. Returns a {@link CapabilityResult}; never throws on
  * probe-level failures (those become tier verdicts). Only "aborted" startup
@@ -140,6 +194,7 @@ export async function runProbes(opts: RunProbesOptions): Promise<CapabilityResul
         };
         outcomes.set(probe.id, outcome);
         applyOutcome(result, probe, outcome);
+        logProbe(probe, { status: 0, reason: 'skipped' });
         continue;
       }
     }
@@ -161,6 +216,7 @@ export async function runProbes(opts: RunProbesOptions): Promise<CapabilityResul
     if (probe.required && outcome.reason === 'unauthorized') {
       result.aborted = true;
       result.abortedBy = { probe: probe.id, reason: outcome.reason };
+      logProbeAbort(probe, outcome.reason);
       break;
     }
   }
@@ -184,6 +240,7 @@ async function executeProbe(probe: Probe, ctx: ExecuteContext): Promise<ProbeOut
   const path = substitutePath(probe.path, ctx.vars);
   if (path.includes('${')) {
     // A required variable is missing; treat as skipped rather than fail.
+    logProbe(probe, { status: 0, reason: 'skipped', path });
     return { id: probe.id, status: 0, reason: 'skipped' };
   }
   const url = `${ctx.baseUrls[probe.base]}${path.startsWith('/') ? path : `/${path}`}`;
@@ -195,6 +252,7 @@ async function executeProbe(probe: Probe, ctx: ExecuteContext): Promise<ProbeOut
   if (probe.range) headers.Range = probe.range;
   if (probe.manifestAuth) {
     if (!ctx.manifestAuth) {
+      logProbe(probe, { status: 0, reason: 'skipped', path });
       return { id: probe.id, status: 0, reason: 'skipped' };
     }
     const credential = Buffer.from(`${ctx.manifestAuth.id}:${ctx.manifestAuth.password}`).toString(
@@ -213,7 +271,7 @@ async function executeProbe(probe: Probe, ctx: ExecuteContext): Promise<ProbeOut
 
   let lastOutcome: ProbeOutcome | undefined;
   for (let attempt = 1; attempt <= ctx.maxAttempts; attempt += 1) {
-    lastOutcome = await issueOnce(probe, url, headers, ctx);
+    lastOutcome = await issueOnce(probe, url, path, headers, ctx);
     if (lastOutcome.reason !== 'rate_limit') return lastOutcome;
   }
   return lastOutcome ?? { id: probe.id, status: 0, reason: 'network' };
@@ -222,6 +280,7 @@ async function executeProbe(probe: Probe, ctx: ExecuteContext): Promise<ProbeOut
 async function issueOnce(
   probe: Probe,
   url: string,
+  path: string,
   headers: Record<string, string>,
   ctx: ExecuteContext,
 ): Promise<ProbeOutcome> {
@@ -241,20 +300,21 @@ async function issueOnce(
       (err.name === 'AbortError' || (err as { code?: string }).code === 'ABORT_ERR')
         ? 'timeout'
         : 'network';
+    logProbe(probe, { status: 0, reason, path });
     return { id: probe.id, status: 0, reason };
   }
   clearTimeout(timer);
 
   const status = response.status;
   const contentRange = response.headers.get('content-range') ?? undefined;
-  const herokuId = await tryReadHerokuId(response);
+  const herokuError = await tryReadHerokuError(response);
 
   let reason: ProbeReason;
   if (probe.successCodes.includes(status)) reason = 'ok';
   else if (probe.emptyOkCodes.includes(status)) reason = 'empty';
   else if (status === 401) reason = 'unauthorized';
   else if (status === 402) reason = 'delinquent';
-  else if (status === 403) reason = herokuId === 'suspended' ? 'suspended' : 'forbidden';
+  else if (status === 403) reason = herokuError.id === 'suspended' ? 'suspended' : 'forbidden';
   else if (status === 404) reason = probe.emptyOkCodes.includes(404) ? 'empty' : 'not_found';
   else if (status === 429) reason = 'rate_limit';
   else if (status >= 500) reason = 'server_error';
@@ -263,17 +323,39 @@ async function issueOnce(
 
   const outcome: ProbeOutcome = { id: probe.id, status, reason };
   if (contentRange !== undefined) outcome.rangeRemaining = contentRange;
+  logProbe(probe, {
+    status,
+    reason,
+    path,
+    errorId: herokuError.id,
+    errorMessage: herokuError.message,
+  });
   return outcome;
 }
 
-async function tryReadHerokuId(response: Response): Promise<string | undefined> {
+/** Parsed fields from a Heroku error envelope (`{ id, message }`). */
+interface HerokuErrorInfo {
+  id?: string | undefined;
+  message?: string | undefined;
+}
+
+/**
+ * Best-effort parse of a Heroku error envelope. The `id` drives classification
+ * (e.g. `suspended` vs generic `forbidden`); `id` and `message` are also used
+ * for `HEROKUMCP_PROBE_DEBUG` logging. Returns the two named fields only — the
+ * raw body is never retained or logged.
+ */
+async function tryReadHerokuError(response: Response): Promise<HerokuErrorInfo> {
   try {
     const text = await response.clone().text();
-    if (!text) return undefined;
-    const body = JSON.parse(text) as { id?: string };
-    return typeof body.id === 'string' ? body.id : undefined;
+    if (!text) return {};
+    const body = JSON.parse(text) as { id?: unknown; message?: unknown };
+    return {
+      id: typeof body.id === 'string' ? body.id : undefined,
+      message: typeof body.message === 'string' ? body.message : undefined,
+    };
   } catch {
-    return undefined;
+    return {};
   }
 }
 

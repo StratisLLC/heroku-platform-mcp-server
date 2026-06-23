@@ -12,6 +12,7 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../auth/middleware.js';
 import type { Config } from '../config.js';
+import { logAuthDebug } from '../auth/debug.js';
 
 export interface WellKnownDeps {
   /** Carries the resolver-backed `publicUrl` getter; read inside the handler so
@@ -78,6 +79,21 @@ export function buildWellKnownRoutes(deps: WellKnownDeps): Hono<AppEnv> {
 
   router.get('/.well-known/oauth-protected-resource', (c) => {
     return c.json(buildProtectedResourceMetadata(deps.cfg.publicUrl));
+  });
+
+  // RFC 9728 clients that bind a token to a specific resource (e.g.
+  // `/mcp-codemode`) request the path-suffixed descriptor
+  // `/.well-known/oauth-protected-resource/<resource>`. We do NOT serve a
+  // per-resource descriptor (only the bare `/mcp` document above exists), so
+  // this stays a 404 — but under HEROKUMCP_AUTH_DEBUG we log the miss so the
+  // absence is visible in the connect trace. Behaviour is unchanged: c.notFound()
+  // yields the same 404 the unmatched route would have produced. Resource id only.
+  router.get('/.well-known/oauth-protected-resource/:resource', (c) => {
+    logAuthDebug('protected_resource_metadata_miss', {
+      status: '404',
+      resource: c.req.param('resource'),
+    });
+    return c.notFound();
   });
 
   return router;

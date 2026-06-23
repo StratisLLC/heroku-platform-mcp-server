@@ -24,6 +24,7 @@ import { isAdminEmail } from '../access/allowlist.js';
 import { hashToken, parseBearer } from './connection-token.js';
 import { openSession, WEB_SESSION_COOKIE, type WebSessionData } from './session.js';
 import { getCookie } from '../routes/cookies.js';
+import { logAuthDebug } from './debug.js';
 
 export interface AppEnv {
   Variables: {
@@ -72,19 +73,22 @@ export interface MiddlewareDeps {
  * OAuth flow.
  */
 export function bearerAuth(deps: MiddlewareDeps) {
-  const unauth = (c: Context<AppEnv>, message: string): Response => {
+  const unauth = (c: Context<AppEnv>, message: string, branch: string): Response => {
     const base = deps.publicUrlResolver.getOrThrow().replace(/\/$/, '');
     c.header(
       'WWW-Authenticate',
       `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`,
     );
+    // Status-only: which verification branch rejected, and the requested path.
+    // No token, header, or secret material is logged.
+    logAuthDebug('bearer_reject', { status: '401', branch, path: c.req.path });
     return c.json({ ok: false, error: { kind: 'auth', message } }, 401);
   };
 
   return async (c: Context<AppEnv>, next: Next): Promise<void | Response> => {
     const token = parseBearer(c.req.header('authorization'));
     if (!token) {
-      return unauth(c, 'missing bearer token');
+      return unauth(c, 'missing bearer token', 'token_missing');
     }
     const hash = hashToken(token);
 
@@ -93,7 +97,7 @@ export function bearerAuth(deps: MiddlewareDeps) {
     if (oauthRow) {
       const user = await findUserById(deps.pool, oauthRow.userId);
       if (!user) {
-        return unauth(c, 'user not found');
+        return unauth(c, 'user not found', 'oauth_user_not_found');
       }
       await touchClientLastUsed(deps.pool, oauthRow.clientId).catch(() => undefined);
       await touchLastSeen(deps.pool, user.id).catch(() => undefined);
@@ -104,6 +108,9 @@ export function bearerAuth(deps: MiddlewareDeps) {
         isAdmin: isAdminEmail(user.email, deps.adminEmails),
       };
       c.set('auth', principal);
+      // Which store matched — distinguishes a store miss (B) from a session/probe
+      // failure further down the pipeline. No token or secret is logged.
+      logAuthDebug('bearer_accept', { store: 'oauth_tokens', path: c.req.path });
       await next();
       return;
     }
@@ -111,11 +118,11 @@ export function bearerAuth(deps: MiddlewareDeps) {
     // 2) Long-lived bearer token (Phase 4).
     const tokenRow = await findActiveTokenByHash(deps.pool, hash);
     if (!tokenRow) {
-      return unauth(c, 'invalid or revoked token');
+      return unauth(c, 'invalid or revoked token', 'store_miss');
     }
     const user = await findUserById(deps.pool, tokenRow.userId);
     if (!user) {
-      return unauth(c, 'user not found');
+      return unauth(c, 'user not found', 'bearer_user_not_found');
     }
     await touchTokenLastUsed(deps.pool, tokenRow.id).catch(() => undefined);
     await touchLastSeen(deps.pool, user.id).catch(() => undefined);
@@ -127,6 +134,7 @@ export function bearerAuth(deps: MiddlewareDeps) {
       isAdmin: isAdminEmail(user.email, deps.adminEmails),
     };
     c.set('auth', principal);
+    logAuthDebug('bearer_accept', { store: 'connection_tokens', path: c.req.path });
     await next();
   };
 }

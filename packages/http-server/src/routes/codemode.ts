@@ -28,6 +28,7 @@ import type { Config } from '../config.js';
 import type { WebSocketFactory } from '../mcp/dynos-run.js';
 import { appendAuditEntry } from '../db/repos/audit-log.js';
 import { buildCodemodeSession } from '../codemode/session.js';
+import { logAuthDebug } from '../auth/debug.js';
 import { RESPONSE_ALREADY_SENT } from '@hono/node-server/utils/response';
 
 export interface CodemodeRouteDeps {
@@ -48,6 +49,7 @@ export function buildCodemodeRoutes(deps: CodemodeRouteDeps): Hono<AppEnv> {
   router.all('/mcp-codemode', async (c) => {
     const auth = c.get('auth');
     if (auth?.kind !== 'bearer' && auth?.kind !== 'oauth') {
+      logAuthDebug('codemode_reject', { status: '401', branch: 'principal_kind', resource: '/mcp-codemode' });
       return c.json({ ok: false, error: { kind: 'auth', message: 'bearer required' } }, 401);
     }
     let tokenFingerprint: string;
@@ -55,12 +57,14 @@ export function buildCodemodeRoutes(deps: CodemodeRouteDeps): Hono<AppEnv> {
     let oauthClientId: string | null = null;
     if (auth.kind === 'bearer') {
       if (!auth.connectionToken) {
+        logAuthDebug('codemode_reject', { status: '401', branch: 'bearer_principal_missing_token', resource: '/mcp-codemode' });
         return c.json({ ok: false, error: { kind: 'auth', message: 'bearer required' } }, 401);
       }
       tokenFingerprint = auth.connectionToken.id.slice(0, 16);
       connectionTokenId = auth.connectionToken.id;
     } else {
       if (!auth.oauthToken) {
+        logAuthDebug('codemode_reject', { status: '401', branch: 'oauth_principal_missing_token', resource: '/mcp-codemode' });
         return c.json({ ok: false, error: { kind: 'auth', message: 'bearer required' } }, 401);
       }
       tokenFingerprint = auth.oauthToken.clientId.slice(0, 16);
@@ -109,13 +113,36 @@ export function buildCodemodeRoutes(deps: CodemodeRouteDeps): Hono<AppEnv> {
       // envelope from initialize, not a session that collapses on first call.
       try {
         await resolveUserAccessToken(deps.pool, auth.user.id, deps.cfg.masterKey, deps.oauthCfg);
+        // A usable upstream Heroku token exists for this session — rules out
+        // hypothesis C as the cause of any subsequent 401.
+        logAuthDebug('codemode_session_init', { status: 'ok', upstream_token: 'usable', resource: '/mcp-codemode' });
       } catch (err) {
         if (err instanceof ReauthRequiredError) {
+          // Heroku rejected the stored refresh token — re-auth required.
+          logAuthDebug('codemode_reject', {
+            status: '401',
+            branch: 'session_init',
+            reason: 'reauth_required',
+            resource: '/mcp-codemode',
+          });
           return c.json(
             { ok: false, error: { kind: 'auth', code: err.code, message: err.message, signInUrl } },
             401,
           );
         }
+        // Distinguish "no Heroku tokens stored for this user" from a decrypt /
+        // other failure — they point at different fixes. The classification is
+        // status-only; no token, blob, or secret material is logged.
+        const reason =
+          err instanceof Error && err.message === 'No stored Heroku tokens for user'
+            ? 'no_stored_heroku_token'
+            : 'decrypt_or_other_failure';
+        logAuthDebug('codemode_reject', {
+          status: '401',
+          branch: 'session_init',
+          reason,
+          resource: '/mcp-codemode',
+        });
         return c.json(
           {
             ok: false,
