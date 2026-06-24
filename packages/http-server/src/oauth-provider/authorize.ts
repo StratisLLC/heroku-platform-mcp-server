@@ -28,7 +28,8 @@ import type { Config } from '../config.js';
 import { findOAuthClientById, bindClientToUser } from '../db/repos/oauth-clients.js';
 import { insertOAuthAuthorization } from '../db/repos/oauth-authorizations.js';
 import { fetchTeams } from '../oauth/heroku.js';
-import { resolveUserAccessToken } from '../oauth/flow.js';
+import { ReauthRequiredError, resolveUserAccessToken } from '../oauth/flow.js';
+import { EnvelopeDecryptError } from '@heroku-mcp/core';
 import { evaluateAccess } from '../access/allowlist.js';
 import { renderConsent } from '../views/consent.js';
 import { formField, formFieldOptional } from './form-field.js';
@@ -113,6 +114,31 @@ export function buildAuthorizeRoutes(deps: AuthorizeDeps): Hono<AppEnv> {
       // No session — kick off Heroku sign-in, return here on completion.
       const next = currentAuthorizeUrl(c);
       return c.redirect(`/sign-in?next=${encodeURIComponent(next)}`);
+    }
+
+    // A valid web-session cookie is NOT sufficient on its own: the user's stored
+    // upstream Heroku token may be absent, undecryptable, or have a dead refresh
+    // token (revoked / expired / scope-changed). If we mint an auth code over an
+    // unusable token, /oauth/token returns 200 but the MCP session-init then
+    // 401s with reauth_required — and the client loops back here on the same
+    // valid cookie forever. Re-validate the token now and, on a non-transient
+    // auth-class failure, force a fresh Heroku sign-in instead of minting a code.
+    // Transient failures (Heroku 5xx / network) must NOT become a sign-in
+    // redirect — resolveUserAccessToken rethrows those unchanged, so we only
+    // intercept the three deterministic "this token can't be used" cases and let
+    // everything else propagate.
+    try {
+      await resolveUserAccessToken(deps.pool, auth.user.id, deps.cfg.masterKey, deps.oauthCfg);
+    } catch (err) {
+      const unusableToken =
+        err instanceof ReauthRequiredError ||
+        err instanceof EnvelopeDecryptError ||
+        (err instanceof Error && err.message === 'No stored Heroku tokens for user');
+      if (unusableToken) {
+        const next = currentAuthorizeUrl(c);
+        return c.redirect(`/sign-in?next=${encodeURIComponent(next)}`);
+      }
+      throw err;
     }
 
     // Determine if the user is pre-authorized (D2) — if so, skip consent.

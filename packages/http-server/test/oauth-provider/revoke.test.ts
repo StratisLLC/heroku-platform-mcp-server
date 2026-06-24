@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { createHash, randomBytes } from 'node:crypto';
-import { buildRig } from '../helpers/wiring.js';
+import { buildRig, seedHerokuToken } from '../helpers/wiring.js';
 import {
   sealSession,
   WEB_SESSION_COOKIE,
@@ -38,6 +38,8 @@ async function fullExchange(rig: ReturnType<typeof buildRig>) {
     email: 'u@example.com',
     default_team: null,
   });
+  // /oauth/authorize re-validates the stored Heroku token before minting a code.
+  seedHerokuToken(rig, user.id);
   const sealed = sealSession<WebSessionData>(
     { userId: user.id, signedInAt: Date.now() },
     WEB_SESSION_TTL_MS,

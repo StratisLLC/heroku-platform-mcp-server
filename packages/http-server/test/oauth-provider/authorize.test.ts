@@ -11,7 +11,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildRig } from '../helpers/wiring.js';
+import { buildRig, seedHerokuToken } from '../helpers/wiring.js';
 import {
   sealSession,
   WEB_SESSION_COOKIE,
@@ -34,18 +34,29 @@ async function registerClient(
   return (await res.json()) as { client_id: string; client_secret: string };
 }
 
-function seedSession(rig: ReturnType<typeof buildRig>, email = 'u@example.com'): string {
+/** Seed a web session. By default also seeds a usable Heroku token, since a
+ *  signed-in user normally has one and /oauth/authorize now re-validates it.
+ *  Pass `{ withToken: false }` to exercise the absent-token path. Returns the
+ *  cookie header and the user id. */
+function seedSession(
+  rig: ReturnType<typeof buildRig>,
+  email = 'u@example.com',
+  opts: { withToken?: boolean } = {},
+): { cookie: string; userId: string } {
   const user = rig.pool.store.upsertUser({
     heroku_id: 'h1',
     email,
     default_team: null,
   });
+  if (opts.withToken !== false) {
+    seedHerokuToken(rig, user.id);
+  }
   const sealed = sealSession<WebSessionData>(
     { userId: user.id, signedInAt: Date.now() },
     WEB_SESSION_TTL_MS,
     rig.cfg.masterKey,
   );
-  return `${WEB_SESSION_COOKIE}=${encodeURIComponent(sealed)}`;
+  return { cookie: `${WEB_SESSION_COOKIE}=${encodeURIComponent(sealed)}`, userId: user.id };
 }
 
 function authorizeUrl(
@@ -139,7 +150,7 @@ describe('GET /oauth/authorize — unauthenticated', () => {
 describe('GET /oauth/authorize — authenticated, no allowlist (open deployment)', () => {
   it('renders the consent screen', async () => {
     const rig = buildRig();
-    const cookie = seedSession(rig);
+    const { cookie } = seedSession(rig);
     const { client_id } = await registerClient(rig.app, undefined, 'Claude Desktop');
     const res = await rig.app.request(authorizeUrl(client_id, undefined, { state: 'XYZ' }), {
       headers: { cookie },
@@ -156,7 +167,7 @@ describe('GET /oauth/authorize — authenticated, no allowlist (open deployment)
 describe('GET /oauth/authorize — authenticated + email allowlisted', () => {
   it('skips consent and redirects with ?code= to the registered redirect_uri', async () => {
     const rig = buildRig({ allowedEmails: ['u@example.com'] });
-    const cookie = seedSession(rig);
+    const { cookie } = seedSession(rig);
     const { client_id } = await registerClient(rig.app);
     const res = await rig.app.request(authorizeUrl(client_id, undefined, { state: 'S1' }), {
       headers: { cookie },
@@ -176,10 +187,72 @@ describe('GET /oauth/authorize — authenticated + email allowlisted', () => {
   });
 });
 
+describe('GET /oauth/authorize — web session but unusable Heroku token', () => {
+  it('redirects to /sign-in (mints no code) when the Heroku token row is absent', async () => {
+    // Email-allowlisted: were the token usable, this would skip consent and mint
+    // a code. The absent token must instead force a fresh Heroku sign-in.
+    const rig = buildRig({ allowedEmails: ['u@example.com'] });
+    const { cookie } = seedSession(rig, 'u@example.com', { withToken: false });
+    const { client_id } = await registerClient(rig.app);
+    const res = await rig.app.request(authorizeUrl(client_id, undefined, { state: 'S1' }), {
+      headers: { cookie },
+    });
+    expect(res.status).toBe(302);
+    const loc = res.headers.get('location') ?? '';
+    expect(loc.startsWith('/sign-in?next=')).toBe(true);
+    expect(decodeURIComponent(loc)).toContain('/oauth/authorize?');
+    // No auth code was minted.
+    expect(rig.pool.store.oauthAuthorizations.length).toBe(0);
+  });
+
+  it('redirects to /sign-in (mints no code) when the stored refresh token is dead (reauth_required)', async () => {
+    // The token row exists but is expired, so resolveUserAccessToken refreshes;
+    // Heroku rejects the refresh with a 4xx → ReauthRequiredError.
+    const herokuFetch = ((input: Parameters<typeof globalThis.fetch>[0]): Promise<Response> => {
+      const u = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (u.startsWith('https://id.heroku.com/oauth/token')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: 'invalid_grant', error: 'invalid_grant' }), {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          }),
+        );
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${u}`));
+    }) as typeof globalThis.fetch;
+    const rig = buildRig({ allowedEmails: ['u@example.com'], herokuFetch });
+    const { cookie, userId } = seedSession(rig, 'u@example.com', { withToken: false });
+    seedHerokuToken(rig, userId, { expiresAt: new Date(Date.now() - 1_000) });
+    const { client_id } = await registerClient(rig.app);
+    const res = await rig.app.request(authorizeUrl(client_id, undefined, { state: 'S1' }), {
+      headers: { cookie },
+    });
+    expect(res.status).toBe(302);
+    expect((res.headers.get('location') ?? '').startsWith('/sign-in?next=')).toBe(true);
+    expect(rig.pool.store.oauthAuthorizations.length).toBe(0);
+  });
+
+  it('healthy path: valid web session + usable token authorizes without an extra bounce', async () => {
+    // Regression: the token re-validation must NOT add a sign-in redirect when
+    // the Heroku token is fine.
+    const rig = buildRig({ allowedEmails: ['u@example.com'] });
+    const { cookie } = seedSession(rig); // seeds a usable token by default
+    const { client_id } = await registerClient(rig.app);
+    const res = await rig.app.request(authorizeUrl(client_id, undefined, { state: 'S1' }), {
+      headers: { cookie },
+    });
+    expect(res.status).toBe(302);
+    const loc = new URL(res.headers.get('location') ?? '');
+    expect(loc.origin).toBe('https://claude.ai');
+    expect(loc.searchParams.get('code')).toMatch(/^[0-9a-f]{32}$/);
+    expect(rig.pool.store.oauthAuthorizations.length).toBe(1);
+  });
+});
+
 describe('POST /oauth/consent', () => {
   it('decision=allow → mints code and redirects to the client', async () => {
     const rig = buildRig();
-    const cookie = seedSession(rig);
+    const { cookie } = seedSession(rig);
     const { client_id } = await registerClient(rig.app);
 
     const form = new URLSearchParams({
@@ -203,7 +276,7 @@ describe('POST /oauth/consent', () => {
 
   it('decision=deny → redirects with error=access_denied and preserves state', async () => {
     const rig = buildRig();
-    const cookie = seedSession(rig);
+    const { cookie } = seedSession(rig);
     const { client_id } = await registerClient(rig.app);
 
     const form = new URLSearchParams({
@@ -248,7 +321,7 @@ describe('POST /oauth/consent', () => {
 
   it('rejects an unregistered redirect_uri at consent time', async () => {
     const rig = buildRig();
-    const cookie = seedSession(rig);
+    const { cookie } = seedSession(rig);
     const { client_id } = await registerClient(rig.app);
     const form = new URLSearchParams({
       decision: 'allow',

@@ -30,6 +30,7 @@ import type { AppEnv } from '../auth/middleware.js';
 import { maskEmail } from '../access/allowlist.js';
 import { appendAuditEntry } from '../db/repos/audit-log.js';
 import { revokeAllUserTokens } from '../db/repos/connection-tokens.js';
+import { deleteHerokuTokens } from '../db/repos/heroku-tokens.js';
 import type { TransportManager } from '../mcp/transport.js';
 
 export interface PublicRoutesDeps {
@@ -251,6 +252,11 @@ export function buildPublicRoutes(deps: PublicRoutesDeps): Hono<AppEnv> {
     const auth = c.get('auth');
     if (auth?.kind !== 'web') return c.redirect('/sign-in');
     const n = await revokeAllUserTokens(deps.pool, auth.user.id);
+    // Also clear the stored upstream Heroku token. "Everywhere" is a full reset:
+    // dropping the row lets a user with a poisoned/revoked Heroku token recover
+    // from the UI — the next sign-in mints a clean one. Plain /sign-out does NOT
+    // do this (it must not force every other session to re-auth Heroku).
+    await deleteHerokuTokens(deps.pool, auth.user.id);
     deps.transports.evictByUser(auth.user.id);
     await appendAuditEntry(deps.pool, {
       userId: auth.user.id,

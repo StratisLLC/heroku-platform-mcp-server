@@ -4,7 +4,13 @@
  */
 
 import type { Hono } from 'hono';
-import { generateMasterKey } from '@heroku-mcp/core';
+import {
+  encodeForStorage,
+  encryptWithDek,
+  encryptWithKek,
+  generateDek,
+  generateMasterKey,
+} from '@heroku-mcp/core';
 import { buildApp } from '../../src/app.js';
 import { TransportManager } from '../../src/mcp/transport.js';
 import { createFakePool, type FakePool } from './fake-pool.js';
@@ -85,4 +91,26 @@ export function buildRig(opts: BuildRigOptions = {}): TestRig {
     herokuProbe: async () => true,
   });
   return { app: built.app, cfg, pool, transports, pendingTokens, oauthCfg };
+}
+
+/**
+ * Seed a usable (or deliberately-expired) encrypted Heroku token row for a user
+ * straight into the fake store, encrypted under the rig's master key so
+ * resolveUserAccessToken can decrypt it. Needed because /oauth/authorize now
+ * re-validates the stored Heroku token before minting a code — a seeded web
+ * session without a token row is redirected to /sign-in. Pass `expiresAt` in
+ * the past to force a refresh attempt.
+ */
+export function seedHerokuToken(rig: TestRig, userId: string, opts: { expiresAt?: Date } = {}): void {
+  const dek = generateDek();
+  const enc = (s: string): Buffer =>
+    Buffer.from(encodeForStorage(encryptWithDek(new TextEncoder().encode(s), dek)));
+  rig.pool.store.herokuTokens.push({
+    user_id: userId,
+    encrypted_access_token: enc('access-token'),
+    encrypted_refresh_token: enc('refresh-token'),
+    encrypted_dek: Buffer.from(encodeForStorage(encryptWithKek(dek, rig.cfg.masterKey))),
+    expires_at: opts.expiresAt ?? new Date(Date.now() + 3_600_000),
+    refreshed_at: new Date(),
+  });
 }

@@ -1,5 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { buildRig } from '../helpers/wiring.js';
+import { buildRig, seedHerokuToken } from '../helpers/wiring.js';
+import {
+  sealSession,
+  WEB_SESSION_COOKIE,
+  WEB_SESSION_TTL_MS,
+  type WebSessionData,
+} from '../../src/auth/session.js';
+
+/** Seed a signed-in user with a stored Heroku token row, returning the user id
+ *  and a web-session cookie header. */
+function seedAuthedUser(rig: ReturnType<typeof buildRig>): { userId: string; cookie: string } {
+  const user = rig.pool.store.upsertUser({ heroku_id: 'h1', email: 'u@example.com', default_team: null });
+  seedHerokuToken(rig, user.id);
+  const sealed = sealSession<WebSessionData>(
+    { userId: user.id, signedInAt: Date.now() },
+    WEB_SESSION_TTL_MS,
+    rig.cfg.masterKey,
+  );
+  return { userId: user.id, cookie: `${WEB_SESSION_COOKIE}=${encodeURIComponent(sealed)}` };
+}
 
 describe('public routes', () => {
   it('GET / shows the landing page with a sign-in button when not signed in', async () => {
@@ -61,6 +80,28 @@ describe('public routes', () => {
     const setCookie = res.headers.get('set-cookie') ?? '';
     expect(setCookie).toMatch(/hmcp_session=/);
     expect(setCookie).toContain('Max-Age=0');
+  });
+});
+
+describe('sign-out Heroku-token lifecycle', () => {
+  it('POST /me/sign-out-everywhere deletes the stored heroku_tokens row', async () => {
+    const rig = buildRig();
+    const { userId, cookie } = seedAuthedUser(rig);
+    expect(rig.pool.store.herokuTokens.some((t) => t.user_id === userId)).toBe(true);
+    const res = await rig.app.request('/me/sign-out-everywhere', {
+      method: 'POST',
+      headers: { cookie },
+    });
+    expect(res.status).toBe(302);
+    expect(rig.pool.store.herokuTokens.some((t) => t.user_id === userId)).toBe(false);
+  });
+
+  it('POST /sign-out retains the stored heroku_tokens row (only the cookie is cleared)', async () => {
+    const rig = buildRig();
+    const { userId, cookie } = seedAuthedUser(rig);
+    const res = await rig.app.request('/sign-out', { method: 'POST', headers: { cookie } });
+    expect(res.status).toBe(302);
+    expect(rig.pool.store.herokuTokens.some((t) => t.user_id === userId)).toBe(true);
   });
 });
 
