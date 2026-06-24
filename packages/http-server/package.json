@@ -61,7 +61,7 @@
     "@heroku-mcp/postgres": "workspace:*",
     "@hono/node-server": "^1.13.7",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "hono": "^4.6.14",
+    "hono": "^4.12.25",
     "pg": "^8.13.1",
     "ws": "^8.18.0",
     "zod": "^3.25.0"

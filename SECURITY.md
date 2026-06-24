@@ -58,6 +58,21 @@ We're happy to credit reporters in the Security Advisory and CHANGELOG unless yo
 
 If you'd like to encrypt your report, request our PGP key in your initial email and we'll send it back before you share details.
 
+## Accepted residual advisories
+
+These are known dependency advisories we have evaluated and consciously accepted, rather than ignored. Each is documented here with the reasoning so the decision is auditable.
+
+- **js-yaml 3.14.2 (GHSA-h67p-54hq-rp68, YAML merge-key quadratic-complexity DoS), dev-only.**
+  Pulled transitively by the release tooling only (changesets → @manypkg/get-packages →
+  read-yaml-file@1.1.0, which pins the js-yaml 3.x API). It is **not** present in the
+  deployed server artifact and processes only trusted in-repo changeset YAML during our
+  own release process. The only fix (js-yaml 4.x) is a breaking major that
+  read-yaml-file cannot accept; a blanket override to 4.x would break the release
+  tooling. The 4.x copies of js-yaml elsewhere in the dev toolchain are pinned to
+  ≥ 4.2.0 via a scoped `pnpm.overrides` entry (`js-yaml@^4.0.0` → `^4.2.0`); only this
+  3.x transitive remains. Risk is accepted pending an upstream changesets update.
+  Last reviewed: 2026-06-24.
+
 ---
 
 Thanks for helping keep herokumcp safe.
