@@ -518,7 +518,7 @@
         <div class="option-card">
           <span class="opt-num">2</span>
           <h3>Deploy your own</h3>
-          <p>Run your own private instance on Heroku in about five minutes. Provision an OAuth client first (the deploy form needs it), then click the button.</p>
+          <p>Run your own private instance on Heroku. The deploy form needs a Heroku OAuth client ID and secret — the credentials the server uses to call Heroku on your behalf. Create them with one CLI command, then click the button. The <a href="https://github.com/StratisLLC/heroku-platform-mcp/blob/main/SETUP.md">setup walkthrough</a> covers the exact ordering.</p>
           <div class="deploy-btn-wrap">
             <a href="https://heroku.com/deploy?template=https://github.com/StratisLLC/heroku-platform-mcp/tree/main">
               <img src="https://www.herokucdn.com/deploy/button.svg" alt="Deploy to Heroku">
@@ -582,10 +582,11 @@
       <h2>Connect from Claude Desktop</h2>
       <p class="section-sub">Five steps. Works in claude.ai web the same way.</p>
       <div class="connect-card">
+        <p style="margin:0 0 16px; font-size:14px; color:var(--sfdc-text-secondary);">Using a shared instance? Use the URL you were given. Deployed your own? Your endpoint is <code>https://YOUR-APP-NAME.herokuapp.com/mcp</code> (or <code>/mcp-codemode</code>), where YOUR-APP-NAME is the app name you picked at deploy.</p>
         <ol class="steps">
           <li>Open <strong>Settings → Connectors → Add custom connector</strong></li>
           <li>Paste either endpoint URL — your choice between <code>/mcp</code> and <code>/mcp-codemode</code></li>
-          <li>Leave OAuth Client ID and Secret blank — the server handles registration automatically via Dynamic Client Registration</li>
+          <li>Leave the connector's <strong>OAuth Client ID and Secret blank</strong> — these are Claude's own registration fields, which the server fills automatically via Dynamic Client Registration. (This is unrelated to the Heroku OAuth client you created when deploying your own instance.)</li>
           <li>Click <strong>Add</strong>. A browser window opens for Heroku authentication. Sign in and click <strong>Authorize</strong></li>
           <li>Connector shows as Connected. You now have access to your Heroku resources through Claude</li>
         </ol>
