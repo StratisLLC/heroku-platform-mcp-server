@@ -49,7 +49,11 @@ export function buildCodemodeRoutes(deps: CodemodeRouteDeps): Hono<AppEnv> {
   router.all('/mcp-codemode', async (c) => {
     const auth = c.get('auth');
     if (auth?.kind !== 'bearer' && auth?.kind !== 'oauth') {
-      logAuthDebug('codemode_reject', { status: '401', branch: 'principal_kind', resource: '/mcp-codemode' });
+      logAuthDebug('codemode_reject', {
+        status: '401',
+        branch: 'principal_kind',
+        resource: '/mcp-codemode',
+      });
       return c.json({ ok: false, error: { kind: 'auth', message: 'bearer required' } }, 401);
     }
     let tokenFingerprint: string;
@@ -57,14 +61,22 @@ export function buildCodemodeRoutes(deps: CodemodeRouteDeps): Hono<AppEnv> {
     let oauthClientId: string | null = null;
     if (auth.kind === 'bearer') {
       if (!auth.connectionToken) {
-        logAuthDebug('codemode_reject', { status: '401', branch: 'bearer_principal_missing_token', resource: '/mcp-codemode' });
+        logAuthDebug('codemode_reject', {
+          status: '401',
+          branch: 'bearer_principal_missing_token',
+          resource: '/mcp-codemode',
+        });
         return c.json({ ok: false, error: { kind: 'auth', message: 'bearer required' } }, 401);
       }
       tokenFingerprint = auth.connectionToken.id.slice(0, 16);
       connectionTokenId = auth.connectionToken.id;
     } else {
       if (!auth.oauthToken) {
-        logAuthDebug('codemode_reject', { status: '401', branch: 'oauth_principal_missing_token', resource: '/mcp-codemode' });
+        logAuthDebug('codemode_reject', {
+          status: '401',
+          branch: 'oauth_principal_missing_token',
+          resource: '/mcp-codemode',
+        });
         return c.json({ ok: false, error: { kind: 'auth', message: 'bearer required' } }, 401);
       }
       tokenFingerprint = auth.oauthToken.clientId.slice(0, 16);
@@ -115,7 +127,11 @@ export function buildCodemodeRoutes(deps: CodemodeRouteDeps): Hono<AppEnv> {
         await resolveUserAccessToken(deps.pool, auth.user.id, deps.cfg.masterKey, deps.oauthCfg);
         // A usable upstream Heroku token exists for this session — rules out
         // hypothesis C as the cause of any subsequent 401.
-        logAuthDebug('codemode_session_init', { status: 'ok', upstream_token: 'usable', resource: '/mcp-codemode' });
+        logAuthDebug('codemode_session_init', {
+          status: 'ok',
+          upstream_token: 'usable',
+          resource: '/mcp-codemode',
+        });
       } catch (err) {
         if (err instanceof ReauthRequiredError) {
           // Heroku rejected the stored refresh token — re-auth required.

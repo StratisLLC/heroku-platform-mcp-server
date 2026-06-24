@@ -61,7 +61,10 @@ export interface BuildAuthorizeUrlOptions {
  * is absent the value is returned unchanged. Pure string transform — no network.
  */
 export function normalizeScope(scope: string): string {
-  const tokens = scope.split(/[\s,]+/).map((t) => t.trim()).filter(Boolean);
+  const tokens = scope
+    .split(/[\s,]+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
   if (tokens.includes('global')) return 'global';
   return scope;
 }

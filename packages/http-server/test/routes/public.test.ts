@@ -10,7 +10,11 @@ import {
 /** Seed a signed-in user with a stored Heroku token row, returning the user id
  *  and a web-session cookie header. */
 function seedAuthedUser(rig: ReturnType<typeof buildRig>): { userId: string; cookie: string } {
-  const user = rig.pool.store.upsertUser({ heroku_id: 'h1', email: 'u@example.com', default_team: null });
+  const user = rig.pool.store.upsertUser({
+    heroku_id: 'h1',
+    email: 'u@example.com',
+    default_team: null,
+  });
   seedHerokuToken(rig, user.id);
   const sealed = sealSession<WebSessionData>(
     { userId: user.id, signedInAt: Date.now() },

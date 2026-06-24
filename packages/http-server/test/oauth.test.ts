@@ -39,7 +39,10 @@ describe('buildAuthorizeUrl', () => {
   });
 
   it('normalises a global scope on the authorize URL', () => {
-    const url = buildAuthorizeUrl({ ...cfg, scope: 'identity,global' }, { state: 'st', codeChallenge: 'cc' });
+    const url = buildAuthorizeUrl(
+      { ...cfg, scope: 'identity,global' },
+      { state: 'st', codeChallenge: 'cc' },
+    );
     expect(new URL(url).searchParams.get('scope')).toBe('global');
   });
 });

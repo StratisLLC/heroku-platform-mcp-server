@@ -101,7 +101,11 @@ export function buildRig(opts: BuildRigOptions = {}): TestRig {
  * session without a token row is redirected to /sign-in. Pass `expiresAt` in
  * the past to force a refresh attempt.
  */
-export function seedHerokuToken(rig: TestRig, userId: string, opts: { expiresAt?: Date } = {}): void {
+export function seedHerokuToken(
+  rig: TestRig,
+  userId: string,
+  opts: { expiresAt?: Date } = {},
+): void {
   const dek = generateDek();
   const enc = (s: string): Buffer =>
     Buffer.from(encodeForStorage(encryptWithDek(new TextEncoder().encode(s), dek)));
