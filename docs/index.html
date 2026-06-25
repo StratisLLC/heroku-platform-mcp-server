@@ -594,6 +594,34 @@
     </section>
 
     <section>
+      <h2>Sample MCP prompts</h2>
+      <p class="section-sub">Three ready-to-paste prompts to try the server the moment you connect. Each starts by asking which enterprise org to scope to. Start with the first — it works on any deployment, no special permissions.</p>
+      <div class="links-grid">
+        <a href="https://github.com/StratisLLC/heroku-platform-mcp-server/blob/main/PROMPT-1-fleet-overview.md" class="link-card">
+          <div>
+            <div class="ln-label">Prompt 1 · Beginner · any scope</div>
+            <div class="ln-text">Fleet Overview — pick an org, inventory every app, formation, add-on, and release into one structured view. Read-only.</div>
+          </div>
+          <span class="arrow">&rarr;</span>
+        </a>
+        <a href="https://github.com/StratisLLC/heroku-platform-mcp-server/blob/main/PROMPT-2-release-health-investigation.md" class="link-card">
+          <div>
+            <div class="ln-label">Prompt 2 · Intermediate · any scope</div>
+            <div class="ln-text">Release &amp; Health Investigation — pick an org and app, run an on-call-style multi-step diagnosis with a cited verdict. Read-only.</div>
+          </div>
+          <span class="arrow">&rarr;</span>
+        </a>
+        <a href="https://github.com/StratisLLC/heroku-platform-mcp-server/blob/main/PROMPT-3-usage-analysis-report.md" class="link-card">
+          <div>
+            <div class="ln-label">Prompt 3 · Advanced · global scope + billing admin</div>
+            <div class="ln-text">Six-Month Usage Analysis — pick an org, build a downloadable report with charts, tables, and documentation-grounded cost suggestions.</div>
+          </div>
+          <span class="arrow">&rarr;</span>
+        </a>
+      </div>
+    </section>
+
+    <section>
       <h2>Switching between endpoints</h2>
       <p>You can change endpoints at any time. Remove the current connector, add a new connector pointing at the other URL, complete a fresh OAuth flow. Old connections at <code>/mcp</code> and new connections at <code>/mcp-codemode</code> coexist — you're not locked in.</p>
     </section>
