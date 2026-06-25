@@ -1,6 +1,6 @@
 {
   "name": "@heroku-mcp/platform",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MCP tools for the Heroku Platform API: apps, dynos, builds, releases, config vars, addons, teams, spaces, webhooks, and more.",
   "keywords": [
     "mcp",

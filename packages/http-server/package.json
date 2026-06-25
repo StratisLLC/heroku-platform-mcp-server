@@ -1,6 +1,6 @@
 {
   "name": "@heroku-mcp/http-server",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Self-hosted HTTP server exposing Heroku MCP tools to LLM clients via OAuth-protected MCP endpoint.",
   "keywords": [
     "mcp",

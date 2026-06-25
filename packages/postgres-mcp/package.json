@@ -1,6 +1,6 @@
 {
   "name": "@heroku-mcp/postgres",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP tools for Heroku Postgres: database info, credentials, backups, followers, maintenance, and write operations.",
   "keywords": [
     "mcp",

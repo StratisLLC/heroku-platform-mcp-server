@@ -1,6 +1,6 @@
 {
   "name": "@heroku-mcp/admin-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Administrative CLI for managing a deployed @heroku-mcp/http-server: user allowlists, OAuth client management, audit log inspection.",
   "keywords": [
     "mcp",

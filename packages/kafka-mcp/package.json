@@ -1,6 +1,6 @@
 {
   "name": "@heroku-mcp/kafka",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP tools for Apache Kafka on Heroku: cluster info, topics, and consumer groups.",
   "keywords": [
     "mcp",

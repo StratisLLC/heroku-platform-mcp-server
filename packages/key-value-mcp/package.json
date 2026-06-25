@@ -1,6 +1,6 @@
 {
   "name": "@heroku-mcp/key-value",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP tools for Heroku Key-Value Store (Redis): admin, credentials, config, and stats.",
   "keywords": [
     "mcp",
