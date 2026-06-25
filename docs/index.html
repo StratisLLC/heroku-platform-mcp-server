@@ -518,7 +518,7 @@
         <div class="option-card">
           <span class="opt-num">2</span>
           <h3>Deploy your own</h3>
-          <p>Run your own private instance on Heroku. The deploy form needs a Heroku OAuth client ID and secret — the credentials the server uses to call Heroku on your behalf. Create them with one CLI command, then click the button. The <a href="https://github.com/StratisLLC/heroku-platform-mcp/blob/main/SETUP.md">setup walkthrough</a> covers the exact ordering.</p>
+          <p>Run your own private instance on Heroku. Because Heroku only assigns your app's real URL <em>after</em> it's created, the order is deploy-then-fixup: (1)&nbsp;create a Heroku OAuth client with a placeholder callback — <code>heroku clients:create 'My Heroku MCP' 'https://example.com/oauth/callback'</code>; (2)&nbsp;paste the client_id and client_secret into the form and deploy (leave scope at <code>identity,write-protected</code> unless you need usage/billing); (3)&nbsp;grab your app's real Web URL — it has a random suffix (Heroku dashboard → Open app, or <code>heroku apps:info</code>; the deploy logs print it too); (4)&nbsp;point the client at it — <code>heroku clients:update &lt;client_id&gt; --url &lt;REAL_URL&gt;/oauth/callback</code>; then connect (below). The <a href="https://github.com/StratisLLC/heroku-platform-mcp/blob/main/SETUP.md">setup walkthrough</a> covers the exact ordering.</p>
           <div class="deploy-btn-wrap">
             <a href="https://heroku.com/deploy?template=https://github.com/StratisLLC/heroku-platform-mcp/tree/main">
               <img src="https://www.herokucdn.com/deploy/button.svg" alt="Deploy to Heroku">
@@ -526,6 +526,7 @@
           </div>
         </div>
       </div>
+      <p style="margin:20px 0 0; padding:12px 16px; background:var(--sfdc-info-bg); border-left:3px solid var(--sfdc-brand); border-radius:4px; font-size:14px; color:var(--sfdc-text-secondary);"><strong>Heads up:</strong> your app's real hostname has a random suffix (e.g. <code>https://your-app-3f9c1abc2d4e.herokuapp.com</code>). The short <code>&lt;app&gt;.herokuapp.com</code> will <strong>not</strong> work for OAuth — always use the real URL from the deploy logs (or <code>heroku apps:info</code>).</p>
     </section>
 
     <section>
@@ -582,7 +583,7 @@
       <h2>Connect from Claude Desktop</h2>
       <p class="section-sub">Five steps. Works in claude.ai web the same way.</p>
       <div class="connect-card">
-        <p style="margin:0 0 16px; font-size:14px; color:var(--sfdc-text-secondary);">Using a shared instance? Use the URL you were given. Deployed your own? Your endpoint is <code>https://YOUR-APP-NAME.herokuapp.com/mcp</code> (or <code>/mcp-codemode</code>), where YOUR-APP-NAME is the app name you picked at deploy.</p>
+        <p style="margin:0 0 16px; font-size:14px; color:var(--sfdc-text-secondary);">Using a shared instance? Use the URL you were given. Deployed your own? Use your app's <strong>real</strong> URL — the long one with the random suffix, e.g. <code>https://your-app-3f9c1abc2d4e.herokuapp.com/mcp</code> (or <code>/mcp-codemode</code>). Get it from the deploy logs or <code>heroku apps:info</code>; the short <code>&lt;app&gt;.herokuapp.com</code> will not work for OAuth.</p>
         <ol class="steps">
           <li>Open <strong>Settings → Connectors → Add custom connector</strong></li>
           <li>Paste either endpoint URL — your choice between <code>/mcp</code> and <code>/mcp-codemode</code></li>
