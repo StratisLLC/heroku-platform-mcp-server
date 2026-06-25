@@ -118,13 +118,38 @@ describe('POST /oauth/register', () => {
     expect(res.status).toBe(400);
   });
 
-  it('rejects unsupported token_endpoint_auth_method', async () => {
+  it('rejects an unsupported token_endpoint_auth_method', async () => {
     const rig = buildRig();
     const res = await register(rig.app, {
       redirect_uris: ['https://x/cb'],
-      token_endpoint_auth_method: 'none',
+      token_endpoint_auth_method: 'private_key_jwt',
     });
     expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; error_description: string };
+    expect(body.error).toBe('invalid_client_metadata');
+    expect(body.error_description).toMatch(/token_endpoint_auth_method/);
+  });
+
+  it('registers a PUBLIC client (auth method "none"): no secret, echoes "none"', async () => {
+    const rig = buildRig();
+    const res = await register(rig.app, {
+      client_name: 'Cursor',
+      redirect_uris: ['https://cursor.example/cb'],
+      token_endpoint_auth_method: 'none',
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.client_id).toMatch(/^[0-9a-f]{32}$/);
+    expect(body.token_endpoint_auth_method).toBe('none');
+    // RFC 7591: a public client's response carries NO secret.
+    expect('client_secret' in body).toBe(false);
+    expect('client_secret_expires_at' in body).toBe(false);
+
+    // Stored as a public client; the NOT NULL secret-hash column still holds a
+    // value, but it is a non-disclosed sentinel (not derivable by any caller).
+    const stored = rig.pool.store.oauthClients.find((x) => x.client_id === body.client_id);
+    expect(stored?.token_endpoint_auth_method).toBe('none');
+    expect(stored?.client_secret_hash?.length).toBeGreaterThan(0);
   });
 
   it('rejects a non-JSON body', async () => {

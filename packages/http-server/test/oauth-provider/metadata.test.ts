@@ -26,6 +26,15 @@ describe('buildAuthorizationServerMetadata', () => {
     expect(md.code_challenge_methods_supported).toEqual(['S256']);
   });
 
+  it('advertises confidential and public (none) token_endpoint_auth_methods', () => {
+    const md = buildAuthorizationServerMetadata('https://srv');
+    expect(md.token_endpoint_auth_methods_supported).toEqual([
+      'client_secret_basic',
+      'client_secret_post',
+      'none',
+    ]);
+  });
+
   it('trims a trailing slash from publicUrl', () => {
     const md = buildAuthorizationServerMetadata('https://srv.example/');
     expect(md.issuer).toBe('https://srv.example');

@@ -25,6 +25,7 @@ import type pg from 'pg';
 import { timingSafeEqualBytes } from '@heroku-mcp/core';
 import type { AppEnv } from '../auth/middleware.js';
 import { findOAuthClientById, touchClientLastUsed } from '../db/repos/oauth-clients.js';
+import { PUBLIC_AUTH_METHOD } from './dcr.js';
 import { formField } from './form-field.js';
 import {
   findAuthorizationByCodeHash,
@@ -77,17 +78,19 @@ export function buildTokenRoutes(deps: TokenDeps): Hono<AppEnv> {
       );
     }
 
-    // Client authentication: Basic first, then form fields.
-    const creds = extractClientCredentials(c, form);
-    if (!creds) {
+    // Identify the client by client_id. Confidential clients send it via Basic
+    // auth (with the secret) or the form body; public clients (OAuth 2.1) send
+    // only client_id in the form body, with no secret.
+    const presented = extractClientAuth(c, form);
+    if (!presented) {
       return c.json(
-        { error: 'invalid_client', error_description: 'client credentials are required' },
+        { error: 'invalid_client', error_description: 'client authentication required' },
         401,
         { 'WWW-Authenticate': 'Basic realm="oauth-token"' },
       );
     }
 
-    const client = await findOAuthClientById(deps.pool, creds.clientId);
+    const client = await findOAuthClientById(deps.pool, presented.clientId);
     if (!client || client.revokedAt) {
       // Be vague to avoid client_id enumeration.
       return c.json(
@@ -95,12 +98,33 @@ export function buildTokenRoutes(deps: TokenDeps): Hono<AppEnv> {
         401,
       );
     }
-    const presentedHash = sha256Bytes(creds.clientSecret);
-    if (!timingSafeEqualBytes(presentedHash, client.clientSecretHash)) {
-      return c.json(
-        { error: 'invalid_client', error_description: 'invalid client credentials' },
-        401,
-      );
+
+    // Public-vs-confidential is decided from the STORED record's registered auth
+    // method — never from what the request presents. This prevents a confidential
+    // client from downgrading itself to skip secret verification, and prevents a
+    // caller from masquerading as public using a confidential client's id.
+    const isPublicClient = client.tokenEndpointAuthMethod === PUBLIC_AUTH_METHOD;
+    if (isPublicClient) {
+      // Public client: no client_secret. Authentication is PKCE (authorization_code
+      // grant — enforced unconditionally in handleAuthorizationCode) or the
+      // refresh-token→client_id binding (handleRefreshToken). Any secret presented
+      // here is irrelevant and ignored.
+    } else {
+      // Confidential client: a secret is REQUIRED and verified constant-time.
+      if (presented.clientSecret === undefined) {
+        return c.json(
+          { error: 'invalid_client', error_description: 'client credentials are required' },
+          401,
+          { 'WWW-Authenticate': 'Basic realm="oauth-token"' },
+        );
+      }
+      const presentedHash = sha256Bytes(presented.clientSecret);
+      if (!timingSafeEqualBytes(presentedHash, client.clientSecretHash)) {
+        return c.json(
+          { error: 'invalid_client', error_description: 'invalid client credentials' },
+          401,
+        );
+      }
     }
 
     const grantType = formField(form, 'grant_type');
@@ -314,14 +338,32 @@ interface ClientCredentials {
   clientSecret: string;
 }
 
-function extractClientCredentials(c: Context<AppEnv>, form: FormData): ClientCredentials | null {
+/** What a token request presents for client authentication: always a
+ *  client_id; a client_secret only when the client supplied one (confidential
+ *  clients via Basic or form). `clientSecret` is `undefined` for a public
+ *  client that sent only its client_id. */
+interface PresentedClientAuth {
+  clientId: string;
+  clientSecret?: string;
+}
+
+/**
+ * Extract the presented client_id (and secret, if any) from the request. Basic
+ * auth takes precedence (always carries id + secret); otherwise the form body's
+ * `client_id` identifies the client and `client_secret` is optional. Returns
+ * null only when no client_id can be determined at all.
+ */
+function extractClientAuth(c: Context<AppEnv>, form: FormData): PresentedClientAuth | null {
   const basic = parseBasicAuth(c.req.header('authorization'));
-  if (basic) return basic;
+  if (basic) return { clientId: basic.clientId, clientSecret: basic.clientSecret };
 
   const formId = form.get('client_id');
-  const formSecret = form.get('client_secret');
-  if (typeof formId === 'string' && formId.length > 0 && typeof formSecret === 'string') {
-    return { clientId: formId, clientSecret: formSecret };
+  if (typeof formId === 'string' && formId.length > 0) {
+    const formSecret = form.get('client_secret');
+    return {
+      clientId: formId,
+      ...(typeof formSecret === 'string' ? { clientSecret: formSecret } : {}),
+    };
   }
   return null;
 }

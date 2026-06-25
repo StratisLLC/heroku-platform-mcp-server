@@ -41,7 +41,12 @@ export interface DcrDeps {
 
 const SUPPORTED_GRANT_TYPES = new Set(['authorization_code', 'refresh_token']);
 const SUPPORTED_RESPONSE_TYPES = new Set(['code']);
-const SUPPORTED_AUTH_METHODS = new Set(['client_secret_basic', 'client_secret_post']);
+// `none` registers a PUBLIC client (OAuth 2.1 / RFC 7636): no client_secret,
+// authenticated at the token endpoint by PKCE alone. The two confidential
+// methods are unchanged.
+const SUPPORTED_AUTH_METHODS = new Set(['client_secret_basic', 'client_secret_post', 'none']);
+/** Auth method that designates a public (secret-less, PKCE-only) client. */
+export const PUBLIC_AUTH_METHOD = 'none';
 
 export function buildDcrRoutes(deps: DcrDeps): Hono<AppEnv> {
   const router = new Hono<AppEnv>();
@@ -124,10 +129,19 @@ export function buildDcrRoutes(deps: DcrDeps): Hono<AppEnv> {
     }
 
     const clientId = deps.generators?.clientId?.() ?? generateClientId();
-    const clientSecret = deps.generators?.clientSecret?.() ?? generateClientSecret();
-    const clientSecretHash = sha256Bytes(clientSecret);
     const grantTypes = req.grant_types ?? ['authorization_code', 'refresh_token'];
     const authMethod = req.token_endpoint_auth_method ?? 'client_secret_basic';
+    const isPublic = authMethod === PUBLIC_AUTH_METHOD;
+
+    // Public clients get no secret. We still must satisfy the NOT NULL
+    // client_secret_hash column, so we store the hash of throwaway random bytes
+    // that are never disclosed — guaranteeing no presented secret can ever
+    // match. The token endpoint authenticates public clients by PKCE, keyed off
+    // the stored token_endpoint_auth_method, and never secret-compares them.
+    const clientSecret = isPublic
+      ? null
+      : (deps.generators?.clientSecret?.() ?? generateClientSecret());
+    const clientSecretHash = sha256Bytes(clientSecret ?? generateClientSecret());
 
     const stored = await insertOAuthClient(deps.pool, {
       clientId,
@@ -140,22 +154,24 @@ export function buildDcrRoutes(deps: DcrDeps): Hono<AppEnv> {
 
     const issuedAtSec = Math.floor(stored.createdAt.getTime() / 1000);
     const base = deps.cfg.publicUrl.replace(/\/$/, '');
-    return c.json(
-      {
-        client_id: clientId,
-        client_secret: clientSecret,
-        // Per RFC 7591, 0 means "no expiration."
-        client_secret_expires_at: 0,
-        client_id_issued_at: issuedAtSec,
-        client_name: stored.clientName,
-        redirect_uris: stored.redirectUris,
-        grant_types: stored.grantTypes,
-        response_types: ['code'],
-        token_endpoint_auth_method: stored.tokenEndpointAuthMethod,
-        registration_client_uri: `${base}/oauth/register/${clientId}`,
-      },
-      201,
-    );
+    // RFC 7591: a public client's registration response carries no
+    // client_secret (nor client_secret_expires_at).
+    const response: Record<string, unknown> = {
+      client_id: clientId,
+      client_id_issued_at: issuedAtSec,
+      client_name: stored.clientName,
+      redirect_uris: stored.redirectUris,
+      grant_types: stored.grantTypes,
+      response_types: ['code'],
+      token_endpoint_auth_method: stored.tokenEndpointAuthMethod,
+      registration_client_uri: `${base}/oauth/register/${clientId}`,
+    };
+    if (!isPublic) {
+      response.client_secret = clientSecret;
+      // Per RFC 7591, 0 means "no expiration."
+      response.client_secret_expires_at = 0;
+    }
+    return c.json(response, 201);
   });
 
   return router;

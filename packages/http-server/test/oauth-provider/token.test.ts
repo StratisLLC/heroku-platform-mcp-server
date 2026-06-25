@@ -46,6 +46,22 @@ async function register(
   return (await res.json()) as { client_id: string; client_secret: string };
 }
 
+/** Register a PUBLIC client (token_endpoint_auth_method "none") — no secret. */
+async function registerPublic(
+  app: import('hono').Hono<import('../../src/auth/middleware.js').AppEnv>,
+): Promise<{ client_id: string }> {
+  const res = await app.request('/oauth/register', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      client_name: 'Cursor',
+      redirect_uris: ['https://claude.ai/cb'],
+      token_endpoint_auth_method: 'none',
+    }),
+  });
+  return (await res.json()) as { client_id: string };
+}
+
 async function getAuthCode(
   rig: ReturnType<typeof buildRig>,
   client_id: string,
@@ -463,5 +479,106 @@ describe('POST /oauth/token — misc', () => {
       body: '{}',
     });
     expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /oauth/token — public clients (PKCE, no secret)', () => {
+  it('authorization_code: succeeds with client_id + PKCE and NO secret', async () => {
+    const rig = buildRig({ allowedEmails: ['u@example.com'] });
+    const { client_id } = await registerPublic(rig.app);
+    const pkce = pkcePair();
+    const code = await getAuthCode(rig, client_id, pkce);
+
+    // client_id in the form body, no Authorization header, no client_secret.
+    const res = await postToken(rig, {
+      grant_type: 'authorization_code',
+      client_id,
+      code,
+      redirect_uri: 'https://claude.ai/cb',
+      code_verifier: pkce.verifier,
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { access_token: string; refresh_token: string };
+    expect(body.access_token.startsWith(ACCESS_TOKEN_PREFIX)).toBe(true);
+    expect(body.refresh_token.startsWith(REFRESH_TOKEN_PREFIX)).toBe(true);
+  });
+
+  it('authorization_code: rejects when the PKCE verifier is wrong', async () => {
+    const rig = buildRig({ allowedEmails: ['u@example.com'] });
+    const { client_id } = await registerPublic(rig.app);
+    const pkce = pkcePair();
+    const code = await getAuthCode(rig, client_id, pkce);
+
+    const res = await postToken(rig, {
+      grant_type: 'authorization_code',
+      client_id,
+      code,
+      redirect_uri: 'https://claude.ai/cb',
+      code_verifier: pkcePair().verifier, // a different, non-matching verifier
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe('invalid_grant');
+  });
+
+  it('authorization_code: rejects when no PKCE verifier is presented (cannot skip PKCE)', async () => {
+    const rig = buildRig({ allowedEmails: ['u@example.com'] });
+    const { client_id } = await registerPublic(rig.app);
+    const pkce = pkcePair();
+    const code = await getAuthCode(rig, client_id, pkce);
+
+    const res = await postToken(rig, {
+      grant_type: 'authorization_code',
+      client_id,
+      code,
+      redirect_uri: 'https://claude.ai/cb',
+      // no code_verifier
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('refresh_token: works without a secret and stays bound to client_id', async () => {
+    const rig = buildRig({ allowedEmails: ['u@example.com'] });
+    const { client_id } = await registerPublic(rig.app);
+    const pkce = pkcePair();
+    const code = await getAuthCode(rig, client_id, pkce);
+    const first = (await (
+      await postToken(rig, {
+        grant_type: 'authorization_code',
+        client_id,
+        code,
+        redirect_uri: 'https://claude.ai/cb',
+        code_verifier: pkce.verifier,
+      })
+    ).json()) as { refresh_token: string };
+
+    const res = await postToken(rig, {
+      grant_type: 'refresh_token',
+      client_id,
+      refresh_token: first.refresh_token,
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { access_token: string; refresh_token: string };
+    expect(body.access_token.startsWith(ACCESS_TOKEN_PREFIX)).toBe(true);
+    expect(body.refresh_token.startsWith(REFRESH_TOKEN_PREFIX)).toBe(true);
+  });
+
+  it('downgrade attack: a confidential client_id with NO secret is rejected (401)', async () => {
+    const rig = buildRig({ allowedEmails: ['u@example.com'] });
+    const { client_id } = await register(rig.app); // CONFIDENTIAL client
+    const pkce = pkcePair();
+    const code = await getAuthCode(rig, client_id, pkce);
+
+    // Present the confidential client's id in the form body with no secret,
+    // attempting to be handled as a public (PKCE-only) client. The stored
+    // record's auth method is authoritative, so this must be rejected.
+    const res = await postToken(rig, {
+      grant_type: 'authorization_code',
+      client_id,
+      code,
+      redirect_uri: 'https://claude.ai/cb',
+      code_verifier: pkce.verifier,
+    });
+    expect(res.status).toBe(401);
+    expect(((await res.json()) as { error: string }).error).toBe('invalid_client');
   });
 });
