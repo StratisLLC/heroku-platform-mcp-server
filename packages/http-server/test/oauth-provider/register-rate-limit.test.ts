@@ -12,11 +12,13 @@ function registerFrom(
   app: import('hono').Hono<import('../../src/auth/middleware.js').AppEnv>,
   ip: string,
 ): Promise<Response> {
-  return app.request('/oauth/register', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
-    body: JSON.stringify({ redirect_uris: ['https://claude.ai/oauth-callback'] }),
-  });
+  return Promise.resolve(
+    app.request('/oauth/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+      body: JSON.stringify({ redirect_uris: ['https://claude.ai/oauth-callback'] }),
+    }),
+  );
 }
 
 describe('/oauth/register rate limiting (integration)', () => {

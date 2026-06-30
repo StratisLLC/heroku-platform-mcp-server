@@ -15,7 +15,7 @@ function appWithLimiter(opts: { windowMs: number; max: number; keyPrefix: string
 }
 
 function get(app: Hono, ip: string): Promise<Response> {
-  return app.request('/limited', { headers: { 'x-forwarded-for': ip } });
+  return Promise.resolve(app.request('/limited', { headers: { 'x-forwarded-for': ip } }));
 }
 
 describe('rateLimit middleware', () => {
