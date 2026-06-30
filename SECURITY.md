@@ -73,6 +73,29 @@ These are known dependency advisories we have evaluated and consciously accepted
   3.x transitive remains. Risk is accepted pending an upstream changesets update.
   Last reviewed: 2026-06-24.
 
+## Security model & abuse controls
+
+- **Token encryption at rest.** User Heroku tokens are encrypted with HEROKUMCP_MASTER_KEY.
+  Anyone with config-var access to a deployment (Heroku app collaborators, or a dyno
+  compromise) can decrypt stored tokens. Treat operators and collaborators as trusted;
+  restrict collaborator access accordingly. Master-key rotation invalidates all stored
+  tokens (users re-sign-in).
+- **Open Dynamic Client Registration is intentional** (MCP/OAuth DCR). A registered client
+  can do nothing until a user completes Heroku OAuth AND passes the user allowlist at
+  /oauth/authorize; registration alone grants zero access. The /oauth/register and
+  /oauth/token endpoints are per-IP rate-limited to bound registration spam (defaults:
+  10 registrations / 10 min and 60 token requests / 10 min per IP, tunable via
+  HEROKUMCP_RL_REGISTER_MAX, HEROKUMCP_RL_REGISTER_WINDOW_MS, HEROKUMCP_RL_TOKEN_MAX,
+  HEROKUMCP_RL_TOKEN_WINDOW_MS). Limits are in-memory and per-dyno: they reset on restart
+  and, if scaled beyond one dyno, apply per dyno.
+- **Least privilege by default.** Default OAuth scope is identity,write-protected (no
+  usage/billing). 'global' is explicit opt-in and additionally requires the Heroku user to
+  hold billing/enterprise-admin permission.
+- **Destructive-action guard.** Write/destructive tools require an explicit confirmation
+  value that the model cannot supply from the same turn that proposed the action.
+- **Transport security.** Security headers (HSTS, X-Frame-Options, X-Content-Type-Options,
+  Referrer-Policy) are set on all responses.
+
 ---
 
 Thanks for helping keep herokumcp safe.

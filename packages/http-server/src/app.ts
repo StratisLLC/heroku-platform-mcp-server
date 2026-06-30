@@ -25,6 +25,7 @@
  */
 
 import { Hono } from 'hono';
+import { secureHeaders } from 'hono/secure-headers';
 import type pg from 'pg';
 import type { Config } from './config.js';
 import type { HerokuOAuthConfig } from './oauth/heroku.js';
@@ -44,6 +45,7 @@ import { buildCodemodeRoutes } from './routes/codemode.js';
 import { buildWellKnownRoutes } from './routes/wellknown.js';
 import { buildDcrRoutes } from './oauth-provider/dcr.js';
 import { publicUrlMiddleware } from './middleware/public-url.js';
+import { rateLimit, envInt } from './middleware/rate-limit.js';
 import { buildAuthorizeRoutes } from './oauth-provider/authorize.js';
 import { buildTokenRoutes } from './oauth-provider/token.js';
 import { buildRevokeRoutes } from './oauth-provider/revoke.js';
@@ -81,6 +83,21 @@ export function buildApp(opts: BuildAppOptions): BuiltApp {
 
   const app = new Hono<AppEnv>();
 
+  // Security headers on EVERY response (harmless on JSON API responses too).
+  // CSP is intentionally left off: the landing/sign-in pages have not been
+  // verified under a strict policy, and HSTS + frame-deny + nosniff + referrer
+  // already close the review findings. Add CSP only after testing the rendered
+  // sign-in page.
+  app.use(
+    '*',
+    secureHeaders({
+      strictTransportSecurity: 'max-age=31536000; includeSubDomains',
+      xFrameOptions: 'DENY',
+      xContentTypeOptions: 'nosniff',
+      referrerPolicy: 'strict-origin-when-cross-origin',
+    }),
+  );
+
   // FIRST middleware on every request: let the resolver lock in the public URL
   // from this request's Host headers (no-op once resolved). Must run before any
   // handler that reads cfg.publicUrl.
@@ -109,6 +126,27 @@ export function buildApp(opts: BuildAppOptions): BuiltApp {
   // unauthenticated and not subject to the session-cookie reader (which is
   // harmless but unnecessary).
   app.route('/', buildWellKnownRoutes({ cfg: opts.cfg }));
+
+  // Per-IP rate limits on the intentionally-open OAuth endpoints, to bound
+  // registration-spam / token-grinding against the open DCR design. Scoped to
+  // these two routes ONLY — /mcp, /oauth/authorize, and the web UI are
+  // deliberately untouched. Defaults are operator-tunable via env.
+  app.use(
+    '/oauth/register',
+    rateLimit({
+      windowMs: envInt(process.env.HEROKUMCP_RL_REGISTER_WINDOW_MS, 10 * 60 * 1000),
+      max: envInt(process.env.HEROKUMCP_RL_REGISTER_MAX, 10),
+      keyPrefix: 'register',
+    }),
+  );
+  app.use(
+    '/oauth/token',
+    rateLimit({
+      windowMs: envInt(process.env.HEROKUMCP_RL_TOKEN_WINDOW_MS, 10 * 60 * 1000),
+      max: envInt(process.env.HEROKUMCP_RL_TOKEN_MAX, 60),
+      keyPrefix: 'token',
+    }),
+  );
 
   // OAuth provider routes (DCR, authorize, token, revoke).
   app.route('/', buildDcrRoutes({ pool: opts.pool, cfg: opts.cfg }));
