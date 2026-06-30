@@ -1,5 +1,11 @@
 # @heroku-mcp/http-server
 
+## 1.2.2
+
+### Patch Changes
+
+- 782c8ef: Add security headers and rate-limit OAuth registration/token endpoints
+
 ## 1.2.1
 
 ### Patch Changes
