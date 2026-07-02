@@ -162,10 +162,12 @@ describe('POST /oauth/register', () => {
     expect(res.status).toBe(400);
   });
 
-  it('accepts http(s) and custom-scheme redirect URIs', async () => {
+  it('accepts https and custom-scheme redirect URIs', async () => {
     const rig = buildRig();
+    // Loopback http is rejected in production (no escape hatch here); that
+    // behavior lives in register-redirect-validation.test.ts.
     const ok = await register(rig.app, {
-      redirect_uris: ['https://x/cb', 'http://localhost:1234/cb', 'claude-desktop://oauth'],
+      redirect_uris: ['https://x/cb', 'claude-desktop://oauth'],
     });
     expect(ok.status).toBe(201);
   });
