@@ -158,10 +158,12 @@ CI will run typecheck, lint, format-check, test, and build across Node 20 and 22
 
 Releases happen at the end of each phase per [the roadmap](README.md#roadmap). Maintainers handle:
 
-1. Running `pnpm changeset version` to apply queued changesets
-2. Committing the version bumps and updated changelogs
-3. Tagging the release (`core-vX.Y.Z`, `platform-vX.Y.Z`)
-4. Pushing tag to trigger npm publish (Phase 10+)
+1. Running `pnpm changeset version` to apply queued changesets (in a reviewed PR)
+2. Committing the version bumps and updated changelogs, and merging that PR
+3. Tagging the merged commit with a single umbrella `vX.Y.Z` tag
+4. Pushing the tag, which triggers the `Publish` workflow to build, test, and publish every changed package to npm **with provenance**
+
+Publishing runs **only** from CI — never publish locally. See [RELEASING.md](RELEASING.md) for the full flow, the umbrella-tag requirement, and why local publishes are prohibited.
 
 ## Code style
 
