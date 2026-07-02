@@ -108,6 +108,18 @@ heroku clients:update <id> --url https://<app>.herokuapp.com/oauth/callback
 heroku clients:rotate <id>
 ```
 
+> **Placeholder redirect URIs are temporary.** The `https://example.com/oauth/callback`
+> above is only a stand-in for the deploy-then-fixup step on the **upstream Heroku** client.
+> Once you know the real app URL you MUST point it at the real callback with
+> `heroku clients:update <id> --url <REAL_URL>/oauth/callback` (or destroy the client) — never
+> leave a live client on a domain you don't control.
+>
+> This is separate from the MCP server's own client registration endpoint
+> (`POST /oauth/register`, RFC 7591), where downstream MCP clients register. That endpoint
+> **rejects** obvious placeholder redirect hosts — RFC 2606 example domains always, and
+> localhost / loopback in production unless `HEROKUMCP_ALLOW_INSECURE_REDIRECTS` is set for
+> local dev — so a stale placeholder client can't accumulate there.
+
 ---
 
 ## Troubleshooting

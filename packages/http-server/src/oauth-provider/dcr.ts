@@ -78,12 +78,14 @@ export function buildDcrRoutes(deps: DcrDeps): Hono<AppEnv> {
 
     const req = parsed.data;
 
+    const allowInsecure = envBool(process.env.HEROKUMCP_ALLOW_INSECURE_REDIRECTS);
     for (const uri of req.redirect_uris) {
-      if (!isValidRedirectUri(uri)) {
+      const verdict = validateRedirectUri(uri, { allowInsecure });
+      if (!verdict.ok) {
         return c.json(
           {
             error: 'invalid_redirect_uri',
-            error_description: `redirect_uri must be an absolute http(s) URL: ${uri}`,
+            error_description: verdict.reason,
           },
           400,
         );
@@ -192,17 +194,118 @@ export function sha256Bytes(s: string): Uint8Array {
   return new Uint8Array(createHash('sha256').update(s).digest());
 }
 
-function isValidRedirectUri(uri: string): boolean {
+/**
+ * RFC 2606 / reserved example domains. These are NEVER a legitimate redirect
+ * host, so registration rejects them regardless of the insecure-redirects
+ * escape hatch — a live client pointing at example.com is always a forgotten
+ * placeholder. Exported so tests can assert the set and operators can reason
+ * about it. `*.example.*` (example as a non-terminal label, e.g.
+ * `www.example.com`) is rejected too, via `isExampleHost`.
+ */
+export const ALWAYS_BLOCKED_REDIRECT_HOSTS = [
+  'example.com',
+  'www.example.com',
+  'example.org',
+  'example.net',
+] as const;
+
+/**
+ * Loopback / non-routable hosts. Blocked in production (a public server can't
+ * be reached at these) but permitted when HEROKUMCP_ALLOW_INSECURE_REDIRECTS is
+ * set, for local dev and testing.
+ */
+export const LOOPBACK_REDIRECT_HOSTS = ['localhost', '127.0.0.1', '::1', '0.0.0.0'] as const;
+
+/** Parse a boolean-ish env value: "1"/"true" (any case) are true; unset,
+ *  empty, or anything else is false. Fail-closed so production defaults to the
+ *  strict behavior. */
+export function envBool(value: string | undefined): boolean {
+  if (value === undefined) return false;
+  const v = value.trim().toLowerCase();
+  return v === '1' || v === 'true';
+}
+
+/** Normalize a URL hostname for comparison: lowercase and strip the brackets
+ *  the URL parser puts around IPv6 literals (so `http://[::1]/` → `::1`). */
+function normalizeHost(hostname: string): string {
+  const h = hostname.toLowerCase();
+  return h.startsWith('[') && h.endsWith(']') ? h.slice(1, -1) : h;
+}
+
+/** True for an RFC 2606 reserved example host, including `example` appearing as
+ *  a non-terminal label (`www.example.com`, `a.example.io`). A trailing
+ *  `example` label (e.g. `cursor.example`, where example is the TLD position)
+ *  is NOT treated as reserved — that would be a false positive. */
+function isExampleHost(host: string): boolean {
+  if ((ALWAYS_BLOCKED_REDIRECT_HOSTS as readonly string[]).includes(host)) return true;
+  const labels = host.split('.');
+  // `example` present with a label both before AND after it → `*.example.*`.
+  return labels.some((label, i) => label === 'example' && i > 0 && i < labels.length - 1);
+}
+
+export type RedirectUriVerdict = { ok: true } | { ok: false; reason: string };
+
+/**
+ * Validate a single `redirect_uri` at registration time (RFC 7591). The goal is
+ * to catch obvious placeholder / non-routable clients (example.com, localhost in
+ * production) — NOT to police every client's custom scheme.
+ *
+ * Rules:
+ *  - Must parse as an absolute URL.
+ *  - http(s): host must be present, not an RFC 2606 example host (always), and
+ *    not a loopback host unless the escape hatch is on. Plain `http:` is only
+ *    accepted for loopback hosts with the escape hatch; everything else must be
+ *    `https:`.
+ *  - Any non-http(s) scheme (e.g. `cursor://`, `vscode://`, `claude-desktop://`)
+ *    is allowed through the scheme/placeholder checks — desktop OAuth flows rely
+ *    on these and we only require a non-empty opaque body. The placeholder-host
+ *    checks apply to http/https URLs only.
+ */
+export function validateRedirectUri(
+  uri: string,
+  opts: { allowInsecure: boolean },
+): RedirectUriVerdict {
+  let u: URL;
   try {
-    const u = new URL(uri);
-    // Accept http(s); accept "claude://" custom schemes too. Reject obvious
-    // garbage like file:// or javascript:.
-    if (u.protocol === 'http:' || u.protocol === 'https:') return true;
-    // Custom schemes (used by some desktop OAuth flows). Require non-empty
-    // scheme + opaque body.
-    if (/^[a-z][a-z0-9+.-]*:$/i.test(u.protocol)) return uri.length > u.protocol.length + 1;
-    return false;
+    u = new URL(uri);
   } catch {
-    return false;
+    return { ok: false, reason: `redirect_uri is not a valid absolute URL: ${uri}` };
   }
+
+  if (u.protocol === 'http:' || u.protocol === 'https:') {
+    const host = normalizeHost(u.hostname);
+    if (!host) {
+      return { ok: false, reason: `redirect_uri has an empty host: ${uri}` };
+    }
+    if (isExampleHost(host)) {
+      return {
+        ok: false,
+        reason: `redirect_uri host is a reserved example domain (RFC 2606): ${uri}`,
+      };
+    }
+    const isLoopback = (LOOPBACK_REDIRECT_HOSTS as readonly string[]).includes(host);
+    if (isLoopback && !opts.allowInsecure) {
+      return {
+        ok: false,
+        reason: `redirect_uri host is loopback/non-routable and not allowed in production (set HEROKUMCP_ALLOW_INSECURE_REDIRECTS for local dev): ${uri}`,
+      };
+    }
+    if (u.protocol === 'http:') {
+      // Plain http is only acceptable for loopback hosts under the escape hatch;
+      // any routable http host must use https.
+      if (isLoopback && opts.allowInsecure) return { ok: true };
+      return {
+        ok: false,
+        reason: `redirect_uri must use https (plain http is only allowed for loopback in local dev): ${uri}`,
+      };
+    }
+    return { ok: true };
+  }
+
+  // Custom schemes (desktop OAuth flows). Require a non-empty opaque body; do
+  // not apply the placeholder-host checks — these schemes have no routable host.
+  if (/^[a-z][a-z0-9+.-]*:$/i.test(u.protocol) && uri.length > u.protocol.length + 1) {
+    return { ok: true };
+  }
+  return { ok: false, reason: `redirect_uri uses an unsupported scheme: ${uri}` };
 }

@@ -88,6 +88,12 @@ These are known dependency advisories we have evaluated and consciously accepted
   HEROKUMCP_RL_REGISTER_MAX, HEROKUMCP_RL_REGISTER_WINDOW_MS, HEROKUMCP_RL_TOKEN_MAX,
   HEROKUMCP_RL_TOKEN_WINDOW_MS). Limits are in-memory and per-dyno: they reset on restart
   and, if scaled beyond one dyno, apply per dyno.
+- **Redirect URI validation.** Dynamic Client Registration rejects placeholder / non-routable
+  redirect hosts so a live client can't sit in the store pointing at a domain the operator does
+  not control. RFC 2606 example domains (example.com/.org/.net and `*.example.*`) are always
+  rejected; localhost / loopback hosts (and plain `http:`) are rejected in production unless
+  HEROKUMCP_ALLOW_INSECURE_REDIRECTS is set for local dev. Custom-scheme URIs (e.g. `cursor://`)
+  used by desktop OAuth flows are still accepted.
 - **Least privilege by default.** Default OAuth scope is identity,write-protected (no
   usage/billing). 'global' is explicit opt-in and additionally requires the Heroku user to
   hold billing/enterprise-admin permission.
