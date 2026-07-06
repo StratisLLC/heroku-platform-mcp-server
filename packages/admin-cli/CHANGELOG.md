@@ -1,5 +1,12 @@
 # @heroku-mcp/admin-cli
 
+## 1.0.3
+
+### Patch Changes
+
+- Updated dependencies [228c905]
+  - @heroku-mcp/http-server@1.2.3
+
 ## 1.0.2
 
 ### Patch Changes

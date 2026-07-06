@@ -1,5 +1,11 @@
 # @heroku-mcp/http-server
 
+## 1.2.3
+
+### Patch Changes
+
+- 228c905: Validate redirect URIs at registration; reject placeholder/non-routable hosts
+
 ## 1.2.2
 
 ### Patch Changes
