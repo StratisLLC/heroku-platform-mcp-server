@@ -101,6 +101,15 @@ These are known dependency advisories we have evaluated and consciously accepted
   value that the model cannot supply from the same turn that proposed the action.
 - **Transport security.** Security headers (HSTS, X-Frame-Options, X-Content-Type-Options,
   Referrer-Policy) are set on all responses.
+- **Supply-chain provenance.** Releases are published from GitHub Actions (the
+  [`Publish` workflow](.github/workflows/publish.yml)) with npm provenance enabled — a Sigstore
+  attestation, signed via GitHub OIDC (`id-token: write`), linking each published tarball to
+  its source commit and workflow run. Verify on a package's npmjs.com page (the Provenance
+  section) or with `npm view <pkg> --json`. Releases MUST go through this workflow; publishing
+  locally (`pnpm changeset publish` / `npm publish`) produces no attestation and permanently
+  claims the version number, so it is prohibited — see [RELEASING.md](RELEASING.md). Packages
+  published before this process was adopted may lack provenance; attestation cannot be added to
+  an already-published version retroactively.
 
 ---
 
