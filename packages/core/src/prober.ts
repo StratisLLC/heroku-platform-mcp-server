@@ -183,41 +183,59 @@ export async function runProbes(opts: RunProbesOptions): Promise<CapabilityResul
     tiers: {},
   };
 
-  for (const probe of probes) {
-    if (probe.dependsOn) {
-      const dep = outcomes.get(probe.dependsOn);
-      if (!dep || (dep.reason !== 'ok' && dep.reason !== 'empty')) {
-        const outcome: ProbeOutcome = {
-          id: probe.id,
-          status: 0,
-          reason: 'skipped',
-        };
-        outcomes.set(probe.id, outcome);
-        applyOutcome(result, probe, outcome);
-        logProbe(probe, { status: 0, reason: 'skipped' });
-        continue;
+  const ctx: ExecuteContext = {
+    token: opts.token,
+    manifestAuth: opts.manifestAuth,
+    vars: opts.vars ?? {},
+    fetchFn,
+    timeoutMs,
+    maxAttempts,
+    baseUrls,
+    userAgent,
+    apiVersion,
+  };
+
+  // Probes run concurrently in dependency "waves": every probe whose
+  // `dependsOn` is already resolved (or absent) goes out at once. Running the
+  // ~20-probe matrix sequentially took 5–11s, which blew past remote MCP
+  // clients' initialize timeout (claude.ai gives up before the session is
+  // built). Outcomes are still applied in definition order, so the resulting
+  // CapabilityResult — including where a required-probe 401 aborts — is
+  // identical to the sequential version.
+  let pending = [...probes];
+  while (pending.length > 0) {
+    const pendingIds = new Set(pending.map((p) => p.id));
+    let ready = pending.filter((p) => !p.dependsOn || !pendingIds.has(p.dependsOn));
+    // A dependency cycle would leave nothing ready; resolve the rest as skipped.
+    if (ready.length === 0) ready = pending;
+    const readySet = new Set(ready);
+    pending = pending.filter((p) => !readySet.has(p));
+
+    const waveOutcomes = await Promise.all(
+      ready.map(async (probe): Promise<ProbeOutcome> => {
+        if (probe.dependsOn) {
+          const dep = outcomes.get(probe.dependsOn);
+          if (!dep || (dep.reason !== 'ok' && dep.reason !== 'empty')) {
+            return { id: probe.id, status: 0, reason: 'skipped' };
+          }
+        }
+        return executeProbe(probe, ctx);
+      }),
+    );
+
+    for (let i = 0; i < ready.length; i += 1) {
+      const probe = ready[i] as Probe;
+      const outcome = waveOutcomes[i] as ProbeOutcome;
+      outcomes.set(probe.id, outcome);
+      applyOutcome(result, probe, outcome);
+      if (outcome.reason === 'skipped') logProbe(probe, { status: 0, reason: 'skipped' });
+
+      if (probe.required && outcome.reason === 'unauthorized') {
+        result.aborted = true;
+        result.abortedBy = { probe: probe.id, reason: outcome.reason };
+        logProbeAbort(probe, outcome.reason);
+        return result;
       }
-    }
-
-    const outcome = await executeProbe(probe, {
-      token: opts.token,
-      manifestAuth: opts.manifestAuth,
-      vars: opts.vars ?? {},
-      fetchFn,
-      timeoutMs,
-      maxAttempts,
-      baseUrls,
-      userAgent,
-      apiVersion,
-    });
-    outcomes.set(probe.id, outcome);
-    applyOutcome(result, probe, outcome);
-
-    if (probe.required && outcome.reason === 'unauthorized') {
-      result.aborted = true;
-      result.abortedBy = { probe: probe.id, reason: outcome.reason };
-      logProbeAbort(probe, outcome.reason);
-      break;
     }
   }
 
