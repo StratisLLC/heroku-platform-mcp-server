@@ -211,21 +211,19 @@ export async function runProbes(opts: RunProbesOptions): Promise<CapabilityResul
     const readySet = new Set(ready);
     pending = pending.filter((p) => !readySet.has(p));
 
-    const waveOutcomes = await Promise.all(
-      ready.map(async (probe): Promise<ProbeOutcome> => {
+    const wave = await Promise.all(
+      ready.map(async (probe): Promise<{ probe: Probe; outcome: ProbeOutcome }> => {
         if (probe.dependsOn) {
           const dep = outcomes.get(probe.dependsOn);
           if (!dep || (dep.reason !== 'ok' && dep.reason !== 'empty')) {
-            return { id: probe.id, status: 0, reason: 'skipped' };
+            return { probe, outcome: { id: probe.id, status: 0, reason: 'skipped' } };
           }
         }
-        return executeProbe(probe, ctx);
+        return { probe, outcome: await executeProbe(probe, ctx) };
       }),
     );
 
-    for (let i = 0; i < ready.length; i += 1) {
-      const probe = ready[i] as Probe;
-      const outcome = waveOutcomes[i] as ProbeOutcome;
+    for (const { probe, outcome } of wave) {
       outcomes.set(probe.id, outcome);
       applyOutcome(result, probe, outcome);
       if (outcome.reason === 'skipped') logProbe(probe, { status: 0, reason: 'skipped' });
